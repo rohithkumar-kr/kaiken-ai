@@ -125,6 +125,38 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply scroll-smooth font-sans;
+  }
+}
+
+@layer utilities {
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+
+  .bg-grid-fade {
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+  }
+
+  .text-gradient {
+    background-image: linear-gradient(
+      to bottom,
+      var(--foreground),
+      color-mix(in oklch, var(--foreground) 55%, transparent)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .glow-foreground {
+    background: radial-gradient(
+      ellipse 55% 45% at 50% 0%,
+      color-mix(in oklch, var(--foreground) 12%, transparent),
+      transparent 70%
+    );
   }
 }
