@@ -3,15 +3,18 @@ import { z } from "zod";
 const serverSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: z.string().url(),
+  CLERK_SECRET_KEY: z.string().min(1),
+  CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
   // Added per milestone as their features land:
-  // M2: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, CLERK_WEBHOOK_SECRET
   // M3: UPLOADTHING_TOKEN
   // M4: GEMINI_API_KEY
-  // M7: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  // M7: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 });
 
 const clientSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
+  // M7: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 });
 
 function parseEnv<T extends z.ZodType>(schema: T, label: string) {
