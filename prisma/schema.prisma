@@ -104,13 +104,14 @@ model User {
   plan          Plan      @default(FREE)
   credits       Int       @default(0)
   emailVerified DateTime?
+  lastLoginAt   DateTime?
 
-  resumes           Resume[]
-  jobDescriptions   JobDescription[]
-  analyses          Analysis[]
-  generatedResumes  GeneratedResume[]
+  resumes            Resume[]
+  jobDescriptions    JobDescription[]
+  analyses           Analysis[]
+  generatedResumes   GeneratedResume[]
   creditTransactions CreditTransaction[]
-  subscription      Subscription?
+  subscription       Subscription?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -120,15 +121,15 @@ model User {
 }
 
 model Subscription {
-  id                    String             @id @default(cuid())
-  userId                String             @unique
-  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  plan                  Plan
-  status                SubscriptionStatus @default(ACTIVE)
-  stripeCustomerId      String?            @unique
-  stripeSubscriptionId  String?            @unique
-  currentPeriodEnd      DateTime?
+  plan                 Plan
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  currentPeriodEnd     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -137,14 +138,14 @@ model Subscription {
 }
 
 model CreditTransaction {
-  id        String     @id @default(cuid())
-  userId    String
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  type      CreditType
-  amount    Int
-  reason    String?
-  metadata  Json?
+  type     CreditType
+  amount   Int
+  reason   String?
+  metadata Json?
 
   createdAt DateTime @default(now())
 
@@ -153,22 +154,24 @@ model CreditTransaction {
 }
 
 model Resume {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title         String
-  role          String?
+  title      String
+  targetRole String?
 
-  fileName      String
-  fileKey       String      @unique
-  fileUrl       String
-  fileType      FileType
-  fileSize      Int
+  fileName String
+  fileKey  String   @unique
+  fileUrl  String
+  fileType FileType
+  fileSize Int
 
-  parseStatus   ParseStatus @default(PENDING)
-  extractedText String?
-  parseError    String?
+  parseStatus ParseStatus @default(PENDING)
+  rawText     String?     @db.Text
+  parseError  String?
+  isPrimary   Boolean     @default(false)
+  checksum    String?
 
   analyses         Analysis[]
   generatedResumes GeneratedResume[]
@@ -181,9 +184,9 @@ model Resume {
 }
 
 model JobDescription {
-  id      String   @id @default(cuid())
-  userId  String
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title   String
   company String?
@@ -213,21 +216,24 @@ model Analysis {
   // re-parsed or edited.
   inputSnapshot Json?
 
-  status          AnalysisStatus  @default(PENDING)
-  error           String?
+  status AnalysisStatus @default(PENDING)
+  error  String?
 
-  atsScore        Int?
-  formatScore     Int?
-  keywordScore    Int?
-  contentScore    Int?
-  summary         String?
-  strengths       Json?
-  improvements    Json?
-  modelVersion    String?
-  analyzedAt      DateTime?
+  atsScore       Int?
+  formatScore    Int?
+  keywordScore   Int?
+  contentScore   Int?
+  grammarScore   Int?
+  summary        String?
+  strengths      Json?
+  weaknesses     Json?
+  improvements   Json?
+  modelVersion   String?
+  analyzedAt     DateTime?
+  processingTime Int?
 
-  keywords    KeywordMatch[]
-  suggestions Suggestion[]
+  keywords         KeywordMatch[]
+  suggestions      Suggestion[]
   generatedResumes GeneratedResume[]
 
   createdAt DateTime @default(now())
@@ -240,23 +246,24 @@ model Analysis {
 }
 
 model KeywordMatch {
-  id          String            @id @default(cuid())
-  analysisId  String
-  analysis    Analysis          @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
-  keyword     String
-  category    KeywordCategory
-  importance  KeywordImportance @default(MEDIUM)
-  count       Int               @default(0)
+  keyword    String
+  category   KeywordCategory
+  importance KeywordImportance @default(MEDIUM)
+  count      Int               @default(0)
+  section    String?
 
   @@index([analysisId])
   @@index([analysisId, category])
 }
 
 model Suggestion {
-  id          String         @id @default(cuid())
-  analysisId  String
-  analysis    Analysis       @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
   type        SuggestionType
   section     String?
@@ -264,23 +271,24 @@ model Suggestion {
   title       String
   description String
   aiRewrite   String?
+  accepted    Boolean        @default(false)
 
   @@index([analysisId])
   @@index([analysisId, type])
 }
 
 model GeneratedResume {
-  id               String           @id @default(cuid())
+  id               String          @id @default(cuid())
   userId           String
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceResumeId   String
-  sourceResume     Resume           @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
+  sourceResume     Resume          @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
   analysisId       String?
-  analysis         Analysis?        @relation(fields: [analysisId], references: [id], onDelete: SetNull)
+  analysis         Analysis?       @relation(fields: [analysisId], references: [id], onDelete: SetNull)
   jobDescriptionId String?
-  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
+  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
 
-  content     Json
+  markdown    String           @db.Text
   format      ResumeFormat     @default(MARKDOWN)
   status      GenerationStatus @default(PENDING)
   error       String?
