@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated prisma client (Prisma ORM v7 `prisma-client` generator)
+/generated/prisma
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
