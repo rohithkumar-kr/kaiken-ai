@@ -1,8 +1,3 @@
-// Kaiken AI — Prisma schema (single source of truth).
-// Prisma ORM v7: uses the `prisma-client` generator (generated client lives
-// in `generated/prisma`) and relies on `prisma.config.ts` for the datasource
-// URL. A driver adapter (`@prisma/adapter-pg`) is required at runtime.
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,9 +7,290 @@ datasource db {
   provider = "postgresql"
 }
 
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
+model User {
+  id                 String              @id @default(cuid())
+  clerkId            String              @unique
+  email              String              @unique
+  name               String?
+  imageUrl           String?
+  plan               Plan                @default(FREE)
+  credits            Int                 @default(0)
+  emailVerified      DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  lastLoginAt        DateTime?
+  analyses           Analysis[]
+  creditTransactions CreditTransaction[]
+  generatedResumes   GeneratedResume[]
+  jobDescriptions    JobDescription[]
+  resumes            Resume[]
+  subscription       Subscription?
+
+  @@index([plan])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  plan                 Plan
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model CreditTransaction {
+  id        String     @id @default(cuid())
+  userId    String
+  type      CreditType
+  amount    Int
+  reason    String?
+  metadata  Json?
+  createdAt DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model Resume {
+  id               String            @id @default(cuid())
+  userId           String
+  title            String
+  fileName         String
+  fileKey          String            @unique
+  fileUrl          String
+  fileType         FileType
+  fileSize         Int
+  parseStatus      ParseStatus       @default(PENDING)
+  parseError       String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  checksum         String?
+  isPrimary        Boolean           @default(false)
+  rawText          String?
+  targetRole       String?
+  analyses         Analysis[]
+  generatedResumes GeneratedResume[]
+  parsedResume     ParsedResume?
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model JobDescription {
+  id               String            @id @default(cuid())
+  userId           String
+  title            String
+  company          String?
+  content          String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  analyses         Analysis[]
+  generatedResumes GeneratedResume[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model Analysis {
+  id               String            @id @default(cuid())
+  userId           String
+  resumeId         String
+  jobDescriptionId String?
+  inputSnapshot    Json?
+  status           AnalysisStatus    @default(PENDING)
+  error            String?
+  atsScore         Int?
+  formatScore      Int?
+  keywordScore     Int?
+  contentScore     Int?
+  summary          String?
+  strengths        Json?
+  improvements     Json?
+  modelVersion     String?
+  analyzedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  grammarScore     Int?
+  processingTime   Int?
+  weaknesses       Json?
+  jobDescription   JobDescription?   @relation(fields: [jobDescriptionId], references: [id])
+  resume           Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  generatedResumes GeneratedResume[]
+  keywords         KeywordMatch[]
+  suggestions      Suggestion[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([resumeId])
+  @@index([jobDescriptionId])
+}
+
+model KeywordMatch {
+  id         String            @id @default(cuid())
+  analysisId String
+  keyword    String
+  category   KeywordCategory
+  importance KeywordImportance @default(MEDIUM)
+  count      Int               @default(0)
+  section    String?
+  analysis   Analysis          @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@index([analysisId, category])
+}
+
+model Suggestion {
+  id          String         @id @default(cuid())
+  analysisId  String
+  type        SuggestionType
+  section     String?
+  severity    Severity       @default(MEDIUM)
+  title       String
+  description String
+  aiRewrite   String?
+  accepted    Boolean        @default(false)
+  analysis    Analysis       @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([analysisId])
+  @@index([analysisId, type])
+}
+
+model GeneratedResume {
+  id               String           @id @default(cuid())
+  userId           String
+  sourceResumeId   String
+  analysisId       String?
+  jobDescriptionId String?
+  format           ResumeFormat     @default(MARKDOWN)
+  status           GenerationStatus @default(PENDING)
+  error            String?
+  downloadUrl      String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  markdown         String
+  analysis         Analysis?        @relation(fields: [analysisId], references: [id])
+  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id])
+  sourceResume     Resume           @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([sourceResumeId])
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  source      String
+  eventType   String
+  eventId     String    @unique
+  payload     Json
+  processed   Boolean   @default(false)
+  error       String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([source, processed])
+  @@index([createdAt])
+}
+
+model ParsedResume {
+  id             String          @id @default(cuid())
+  resumeId       String          @unique
+  name           String?
+  email          String?
+  phone          String?
+  summary        String?
+  modelVersion   String?
+  parsedAt       DateTime        @default(now())
+  resume         Resume          @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  skills         Skill[]
+  experiences    Experience[]
+  projects       Project[]
+  educations     Education[]
+  certifications Certification[]
+
+  @@index([resumeId])
+}
+
+model Skill {
+  id             String        @id @default(cuid())
+  parsedResumeId String
+  name           String
+  category       String?
+  order          Int           @default(0)
+  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+
+  @@index([parsedResumeId])
+}
+
+model Experience {
+  id             String        @id @default(cuid())
+  parsedResumeId String
+  title          String
+  company        String?
+  location       String?
+  startDate      String?
+  endDate        String?
+  description    String?
+  order          Int           @default(0)
+  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+
+  @@index([parsedResumeId])
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  parsedResumeId String
+  name           String
+  description    String?
+  technologies   Json?
+  url            String?
+  startDate      String?
+  endDate        String?
+  order          Int           @default(0)
+  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+
+  @@index([parsedResumeId])
+}
+
+model Education {
+  id             String        @id @default(cuid())
+  parsedResumeId String
+  institution    String
+  degree         String?
+  fieldOfStudy   String?
+  startDate      String?
+  endDate        String?
+  grade          String?
+  order          Int           @default(0)
+  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+
+  @@index([parsedResumeId])
+}
+
+model Certification {
+  id             String        @id @default(cuid())
+  parsedResumeId String
+  name           String
+  issuer         String?
+  date           String?
+  url            String?
+  order          Int           @default(0)
+  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+
+  @@index([parsedResumeId])
+}
 
 enum Plan {
   FREE
@@ -89,231 +365,4 @@ enum SubscriptionStatus {
   PAST_DUE
   CANCELED
   UNPAID
-}
-
-// ---------------------------------------------------------------------------
-// Models
-// ---------------------------------------------------------------------------
-
-model User {
-  id            String    @id @default(cuid())
-  clerkId       String    @unique
-  email         String    @unique
-  name          String?
-  imageUrl      String?
-  plan          Plan      @default(FREE)
-  credits       Int       @default(0)
-  emailVerified DateTime?
-  lastLoginAt   DateTime?
-
-  resumes            Resume[]
-  jobDescriptions    JobDescription[]
-  analyses           Analysis[]
-  generatedResumes   GeneratedResume[]
-  creditTransactions CreditTransaction[]
-  subscription       Subscription?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([plan])
-  @@index([createdAt])
-}
-
-model Subscription {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  plan                 Plan
-  status               SubscriptionStatus @default(ACTIVE)
-  stripeCustomerId     String?            @unique
-  stripeSubscriptionId String?            @unique
-  currentPeriodEnd     DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([status])
-}
-
-model CreditTransaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  type     CreditType
-  amount   Int
-  reason   String?
-  metadata Json?
-
-  createdAt DateTime @default(now())
-
-  @@index([userId])
-  @@index([userId, createdAt])
-}
-
-model Resume {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title      String
-  targetRole String?
-
-  fileName String
-  fileKey  String   @unique
-  fileUrl  String
-  fileType FileType
-  fileSize Int
-
-  parseStatus ParseStatus @default(PENDING)
-  rawText     String?     @db.Text
-  parseError  String?
-  isPrimary   Boolean     @default(false)
-  checksum    String?
-
-  analyses         Analysis[]
-  generatedResumes GeneratedResume[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, createdAt])
-}
-
-model JobDescription {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title   String
-  company String?
-  content String
-
-  analyses         Analysis[]
-  generatedResumes GeneratedResume[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, createdAt])
-}
-
-model Analysis {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  resumeId         String
-  resume           Resume          @relation(fields: [resumeId], references: [id], onDelete: Cascade)
-  jobDescriptionId String?
-  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
-
-  // Immutable snapshot of the exact inputs used for this evaluation so that
-  // historical reports stay stable even if the source resume/JD is later
-  // re-parsed or edited.
-  inputSnapshot Json?
-
-  status AnalysisStatus @default(PENDING)
-  error  String?
-
-  atsScore       Int?
-  formatScore    Int?
-  keywordScore   Int?
-  contentScore   Int?
-  grammarScore   Int?
-  summary        String?
-  strengths      Json?
-  weaknesses     Json?
-  improvements   Json?
-  modelVersion   String?
-  analyzedAt     DateTime?
-  processingTime Int?
-
-  keywords         KeywordMatch[]
-  suggestions      Suggestion[]
-  generatedResumes GeneratedResume[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, createdAt])
-  @@index([resumeId])
-  @@index([jobDescriptionId])
-}
-
-model KeywordMatch {
-  id         String   @id @default(cuid())
-  analysisId String
-  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-
-  keyword    String
-  category   KeywordCategory
-  importance KeywordImportance @default(MEDIUM)
-  count      Int               @default(0)
-  section    String?
-
-  @@index([analysisId])
-  @@index([analysisId, category])
-}
-
-model Suggestion {
-  id         String   @id @default(cuid())
-  analysisId String
-  analysis   Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-
-  type        SuggestionType
-  section     String?
-  severity    Severity       @default(MEDIUM)
-  title       String
-  description String
-  aiRewrite   String?
-  accepted    Boolean        @default(false)
-
-  @@index([analysisId])
-  @@index([analysisId, type])
-}
-
-model GeneratedResume {
-  id               String          @id @default(cuid())
-  userId           String
-  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceResumeId   String
-  sourceResume     Resume          @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
-  analysisId       String?
-  analysis         Analysis?       @relation(fields: [analysisId], references: [id], onDelete: SetNull)
-  jobDescriptionId String?
-  jobDescription   JobDescription? @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
-
-  markdown    String           @db.Text
-  format      ResumeFormat     @default(MARKDOWN)
-  status      GenerationStatus @default(PENDING)
-  error       String?
-  downloadUrl String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([userId, createdAt])
-  @@index([sourceResumeId])
-}
-
-model WebhookEvent {
-  id          String    @id @default(cuid())
-  source      String
-  eventType   String
-  eventId     String    @unique
-  payload     Json
-  processed   Boolean   @default(false)
-  error       String?
-  processedAt DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([source, processed])
-  @@index([createdAt])
 }

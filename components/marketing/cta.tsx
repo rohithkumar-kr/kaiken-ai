@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 import { Reveal } from "./motion";
 
-export function Cta() {
+export function Cta({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <section className="py-24 sm:py-32">
       <div className="mx-auto w-full max-w-6xl px-6 lg:px-8">
@@ -25,7 +25,7 @@ export function Cta() {
                 Free to start.
               </p>
               <Link
-                href="/sign-up"
+                href={isSignedIn ? "/dashboard" : "/sign-up"}
                 className={cn(
                   buttonVariants({ variant: "outline", size: "lg" }),
                   "bg-background text-foreground hover:bg-background/90 mt-2 h-11 gap-2 border-transparent px-6 text-base"

@@ -6,17 +6,31 @@ import { NextResponse, type NextRequest } from "next/server";
  * Add webhook paths here when they land (e.g. `/api/webhooks(.*)`).
  */
 function isPublicPath(pathname: string) {
-  return pathname === "/" || pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    // UploadThing callback: the upload action is authenticated inside the
+    // route (core.ts middleware), and the dev-stream callback is a
+    // server-to-server request with no browser session (HMAC-verified).
+    pathname.startsWith("/api/uploadthing")
+  );
 }
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  if (!isPublicPath(req.nextUrl.pathname)) {
-    // Resource-based guard: throws a redirect to `/sign-in` (with return-back
-    // URL) when signed out; for non-document requests it returns a 404.
-    await auth.protect();
+export default clerkMiddleware(
+  async (auth, req: NextRequest) => {
+    if (!isPublicPath(req.nextUrl.pathname)) {
+      // Resource-based guard: throws a redirect to `/sign-in` (with return-back
+      // URL) when signed out; for non-document requests it returns a 404.
+      await auth.protect();
+    }
+    return NextResponse.next();
+  },
+  {
+    afterSignInUrl: "/dashboard",
+    afterSignUpUrl: "/dashboard",
   }
-  return NextResponse.next();
-});
+);
 
 export const config = {
   matcher: [

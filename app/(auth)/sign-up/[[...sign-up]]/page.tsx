@@ -4,5 +4,8 @@ import { SignUp } from "@clerk/nextjs";
 export const metadata: Metadata = { title: "Sign up" };
 
 export default function SignUpPage() {
-  return <SignUp />;
+  return <SignUp
+  forceRedirectUrl="/dashboard"
+  fallbackRedirectUrl="/dashboard"
+/>;
 }

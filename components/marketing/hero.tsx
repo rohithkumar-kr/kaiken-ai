@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 import { Reveal } from "./motion";
 
-export function Hero() {
+export function Hero({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <section className="relative overflow-hidden">
       <div className="bg-grid bg-grid-fade absolute inset-0 -z-10" aria-hidden="true" />
@@ -43,7 +43,7 @@ export function Hero() {
         <Reveal delay={0.24}>
           <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
             <Link
-              href="/sign-up"
+              href={isSignedIn ? "/dashboard" : "/sign-up"}
               className={cn(
                 buttonVariants({ variant: "default", size: "lg" }),
                 "h-11 gap-2 px-6 text-base"

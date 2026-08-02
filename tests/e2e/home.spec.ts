@@ -4,7 +4,7 @@ test("renders the home page", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("precision AI evaluation");
   await expect(
-    page.getByRole("main").getByRole("link", { name: "Analyze Resume" }).first(),
+    page.getByRole("main").getByRole("link", { name: "Analyze Resume" }).first()
   ).toBeVisible();
 });
 

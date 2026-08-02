@@ -1,5 +1,9 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {/* config options here */};
+const nextConfig: NextConfig = {
+  // pdf-parse (PDF.js) and mammoth load native-ish / non-bundlable Node modules
+  // (workers, filesystem helpers). Keep them external to the server bundle.
+  serverExternalPackages: ["pdf-parse", "mammoth"],
+};
 
 export default nextConfig;

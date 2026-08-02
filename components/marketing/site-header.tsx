@@ -14,7 +14,7 @@ const NAV_LINKS = [
   { href: "#faq", label: "FAQ" },
 ];
 
-export function SiteHeader() {
+export function SiteHeader({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
     <header className="bg-background/75 sticky top-0 z-40 w-full border-b backdrop-blur-xl">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6 lg:px-8">
@@ -35,18 +35,29 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Link
-            href="/sign-in"
-            className={cn(buttonVariants({ variant: "ghost", size: "default" }), "h-8 px-3.5")}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/sign-up"
-            className={cn(buttonVariants({ variant: "default" }), "h-8 px-3.5")}
-          >
-            Get started
-          </Link>
+          {isSignedIn ? (
+            <Link
+              href="/dashboard"
+              className={cn(buttonVariants({ variant: "default", size: "default" }), "h-8 px-3.5")}
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/sign-in"
+                className={cn(buttonVariants({ variant: "ghost", size: "default" }), "h-8 px-3.5")}
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/sign-up"
+                className={cn(buttonVariants({ variant: "default" }), "h-8 px-3.5")}
+              >
+                Get started
+              </Link>
+            </>
+          )}
         </div>
 
         <details className="group/menu relative md:hidden">
@@ -71,18 +82,29 @@ export function SiteHeader() {
               </Link>
             ))}
             <div className="mt-1 flex flex-col gap-1 border-t pt-2">
-              <Link
-                href="/sign-in"
-                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md px-3 py-2 text-sm transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/sign-up"
-                className="bg-primary text-primary-foreground rounded-md px-3 py-2 text-center text-sm font-medium"
-              >
-                Get started
-              </Link>
+              {isSignedIn ? (
+                <Link
+                  href="/dashboard"
+                  className="bg-primary text-primary-foreground rounded-md px-3 py-2 text-center text-sm font-medium"
+                >
+                  Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/sign-in"
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md px-3 py-2 text-sm transition-colors"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/sign-up"
+                    className="bg-primary text-primary-foreground rounded-md px-3 py-2 text-center text-sm font-medium"
+                  >
+                    Get started
+                  </Link>
+                </>
+              )}
             </div>
           </nav>
         </details>
