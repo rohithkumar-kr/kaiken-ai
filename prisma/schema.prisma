@@ -20,6 +20,7 @@ model User {
   updatedAt          DateTime            @updatedAt
   lastLoginAt        DateTime?
   analyses           Analysis[]
+  coverLetters       CoverLetter[]
   creditTransactions CreditTransaction[]
   generatedResumes   GeneratedResume[]
   jobDescriptions    JobDescription[]
@@ -129,6 +130,7 @@ model Analysis {
   generatedResumes GeneratedResume[]
   keywords         KeywordMatch[]
   suggestions      Suggestion[]
+  coverLetters     CoverLetter[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -181,6 +183,7 @@ model GeneratedResume {
   markdown         String
   data             Json?
   analysis         Analysis?        @relation(fields: [analysisId], references: [id])
+  coverLetters     CoverLetter[]
   jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id])
   sourceResume     Resume           @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -188,6 +191,26 @@ model GeneratedResume {
   @@index([userId])
   @@index([userId, createdAt])
   @@index([sourceResumeId])
+}
+
+model CoverLetter {
+  id                String            @id @default(cuid())
+  userId            String
+  analysisId        String
+  generatedResumeId String?
+  content           String
+  status            GenerationStatus  @default(COMPLETED)
+  error             String?
+  modelVersion      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  analysis          Analysis          @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  generatedResume   GeneratedResume?  @relation(fields: [generatedResumeId], references: [id])
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([analysisId])
 }
 
 model WebhookEvent {

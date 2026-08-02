@@ -15,6 +15,7 @@ export function ImproveResumeButton({ analysisId }: { analysisId: string }) {
     if (loading) return;
 
     setLoading(true);
+    const toastId = toast.loading("Generating optimized resume...");
     try {
       const response = await fetch(`/api/analyses/${analysisId}/optimize`, {
         method: "POST",
@@ -26,10 +27,11 @@ export function ImproveResumeButton({ analysisId }: { analysisId: string }) {
       if (!data.generatedResumeId) {
         throw new Error("No optimized resume was returned");
       }
-      toast.success("Resume optimized — showing your improved version");
+      toast.loading("Preparing optimized resume...", { id: toastId });
+      toast.success("Optimized resume ready", { id: toastId });
       router.push(`/dashboard/optimized/${data.generatedResumeId}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to optimize the resume");
+    } catch {
+      toast.error("Optimization failed", { id: toastId });
       setLoading(false);
     }
   }

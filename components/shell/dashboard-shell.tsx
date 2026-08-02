@@ -2,7 +2,7 @@
 
 import { UserButton } from "@clerk/nextjs";
 import type { LucideIcon } from "lucide-react";
-import { History, LayoutDashboard, Menu, X } from "lucide-react";
+import { FilePenLine, History, LayoutDashboard, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -18,6 +18,7 @@ export type DashboardUser = {
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/history", label: "History", icon: History },
+  { href: "/dashboard/cover-letters", label: "Cover Letters", icon: FilePenLine },
 ];
 
 function Brand() {

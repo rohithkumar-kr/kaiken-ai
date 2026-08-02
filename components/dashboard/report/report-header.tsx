@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
 import { ExportButton } from "./export-button";
+import { GenerateCoverLetterButton } from "./generate-cover-letter-button";
 import { ImproveResumeButton } from "./improve-resume-button";
 import { fadeUp } from "./motion";
 import type { ReportView } from "./types";
@@ -61,6 +62,7 @@ export function ReportHeader({ view }: { view: ReportView }) {
             <span className="text-muted-foreground font-normal"> / 100</span>
           </span>
           <ImproveResumeButton analysisId={view.id} />
+          <GenerateCoverLetterButton analysisId={view.id} />
           <ExportButton analysisId={view.id} />
         </div>
       </div>

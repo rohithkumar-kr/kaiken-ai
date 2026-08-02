@@ -75,6 +75,8 @@ export function JobDescriptions({
     setSaving(true);
     setFormError(null);
 
+    const toastId = toast.loading("Saving job description...");
+
     const payload = {
       title: title.trim(),
       company: company.trim() || null,
@@ -94,14 +96,14 @@ export function JobDescriptions({
       if (!response.ok) {
         throw new Error(data.error ?? "Failed to save the job description");
       }
-      toast.success(editingId ? "Job description updated" : "Job description saved");
+      toast.success("Saved successfully", { id: toastId });
       resetForm();
       router.refresh();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Something went wrong. Please try again.";
       setFormError(message);
-      toast.error(message);
+      toast.error("Save failed", { id: toastId });
     } finally {
       setSaving(false);
     }
@@ -120,6 +122,7 @@ export function JobDescriptions({
     if (!deleteTarget) return;
 
     setDeleting(true);
+    const toastId = toast.loading("Deleting...");
     try {
       const response = await fetch(`/api/job-descriptions/${deleteTarget.id}`, {
         method: "DELETE",
@@ -128,13 +131,11 @@ export function JobDescriptions({
       if (!response.ok) {
         throw new Error(data.error ?? "Failed to delete the job description");
       }
-      toast.success("Job description deleted");
+      toast.success("Deleted successfully", { id: toastId });
       setDeleteTarget(null);
       router.refresh();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete the job description"
-      );
+    } catch {
+      toast.error("Delete failed", { id: toastId });
     } finally {
       setDeleting(false);
     }
@@ -144,6 +145,7 @@ export function JobDescriptions({
     if (analyzingId) return;
 
     setAnalyzingId(item.id);
+    const toastId = toast.loading("Analyzing your resume...");
     try {
       const response = await fetch("/api/analyze-ats", {
         method: "POST",
@@ -154,14 +156,15 @@ export function JobDescriptions({
       if (!response.ok) {
         throw new Error(data.error ?? "Failed to run the analysis");
       }
-      toast.success("Analysis complete");
+      toast.loading("Preparing report...", { id: toastId });
+      toast.success("ATS analysis complete", { id: toastId });
       if (data.analysisId) {
         router.push(`/dashboard/analysis/${data.analysisId}`);
       } else {
         router.refresh();
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to run the analysis");
+    } catch {
+      toast.error("Analysis failed", { id: toastId });
     } finally {
       setAnalyzingId(null);
     }

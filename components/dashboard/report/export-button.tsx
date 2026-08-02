@@ -16,6 +16,7 @@ export function ExportButton({ analysisId }: { analysisId: string }) {
     if (exporting) return;
 
     setExporting(format);
+    const toastId = toast.loading(format === "pdf" ? "Generating PDF..." : "Preparing Markdown...");
     try {
       const response = await fetch(`/api/analyses/${analysisId}/export?format=${format}`);
       if (!response.ok) {
@@ -37,9 +38,9 @@ export function ExportButton({ analysisId }: { analysisId: string }) {
       link.remove();
       URL.revokeObjectURL(url);
 
-      toast.success(format === "pdf" ? "PDF exported" : "Markdown exported");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to export the report");
+      toast.success(format === "pdf" ? "PDF downloaded" : "Markdown downloaded", { id: toastId });
+    } catch {
+      toast.error("Export failed", { id: toastId });
     } finally {
       setExporting(null);
     }

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { uploadFiles } from "@/lib/uploadthing-client";
@@ -101,7 +102,7 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
 
   useEffect(() => stopTicker, [stopTicker]);
 
-  async function runAnalyze(payload: AnalyzePayload, startStep: number) {
+  async function runAnalyze(payload: AnalyzePayload, startStep: number, toastId?: string | number) {
     setPhase("analyzing");
     setStepIndex(startStep);
     setError(null);
@@ -113,6 +114,9 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
     }, 200);
 
     try {
+      if (toastId !== undefined) {
+        toast.loading("Analyzing with AI...", { id: toastId });
+      }
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,10 +131,17 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
       }
       setStepIndex(STEPS.length - 1);
       setPhase("done");
+      if (toastId !== undefined) {
+        toast.loading("Preparing report...", { id: toastId });
+        toast.success("Resume parsed successfully", { id: toastId });
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
       setPhase("error");
+      if (toastId !== undefined) {
+        toast.error("Resume upload failed", { id: toastId });
+      }
     } finally {
       stopTicker();
     }
@@ -154,14 +165,20 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
     setStepIndex(0);
     setPhase("uploading");
 
+    const toastId = toast.loading("Uploading resume...");
+
     try {
       const [uploaded] = await uploadFiles("resumeUploader", {
         files: [file],
-        onUploadProgress: ({ progress }) => setUploadProgress(progress),
+        onUploadProgress: ({ progress }) => {
+          setUploadProgress(progress);
+          toast.loading(`Uploading resume... ${Math.round(progress)}%`, { id: toastId });
+        },
       });
       if (!uploaded) {
         throw new Error("Upload failed. Please try again.");
       }
+      toast.loading("Extracting resume...", { id: toastId });
       await runAnalyze(
         {
           fileKey: uploaded.key,
@@ -170,11 +187,13 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
           fileSize: uploaded.size,
           resumeId: resume?.id,
         },
-        1
+        1,
+        toastId
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
       setPhase("error");
+      toast.error("Resume upload failed", { id: toastId });
     }
   }
 
@@ -193,6 +212,7 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
 
   function handleReanalyze() {
     if (!resume) return;
+    const toastId = toast.loading("Parsing resume...");
     void runAnalyze(
       {
         fileKey: resume.fileKey,
@@ -201,7 +221,8 @@ export function UploadZone({ resume }: { resume?: ExistingResume | null }) {
         fileSize: resume.fileSize,
         resumeId: resume.id,
       },
-      1
+      1,
+      toastId
     );
   }
 

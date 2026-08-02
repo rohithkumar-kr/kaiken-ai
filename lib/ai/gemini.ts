@@ -3,6 +3,7 @@ import "server-only";
 import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 
 import { atsOutputSchema, type AtsOutput } from "@/lib/types/analysis";
+import { coverLetterOutputSchema } from "@/lib/types/cover-letter";
 import {
   optimizedResumeSchema,
   type OptimizedResumeData,
@@ -400,4 +401,118 @@ export async function optimizeResumeForJob(
   }
 
   return optimizedResumeSchema.parse(parseJson(rawText));
+}
+
+const COVER_LETTER_SCHEMA = {
+  type: "object",
+  properties: {
+    content: { type: "string" },
+  },
+  required: ["content"],
+} as const;
+
+function buildCoverLetterPrompt(input: {
+  resume: ParsedResumeData;
+  optimized?: OptimizedResumeData;
+  job: { title: string; company: string | null; content: string };
+  analysis: AtsOutput;
+}): string {
+  return [
+    "You are an expert career coach and professional writer. Write a personalized cover letter for the candidate applying to the job below.",
+    "",
+    "Rules:",
+    "- NEVER invent experience, projects, companies, education, credentials, or skills that are not present in the candidate's resume.",
+    "- Mention only real skills from the resume.",
+    "- Personalize the letter for the target company and role.",
+    "- Keep the cover letter under one A4 page (approximately 300–450 words).",
+    "- Use a warm, professional tone. Start with a formal salutation (e.g. \"Dear Hiring Manager,\") and end with a formal closing (e.g. \"Sincerely,\") followed by the candidate's name.",
+    "- Do not include the candidate's contact details or a date — those are added separately.",
+    "- Return ONLY the letter body in the `content` field, as plain paragraphs separated by single blank lines.",
+    "",
+    "Target job description:",
+    `Title: ${input.job.title}`,
+    input.job.company ? `Company: ${input.job.company}` : "Company: n/a",
+    "```",
+    input.job.content,
+    "```",
+    "",
+    "Candidate resume:",
+    "```json",
+    JSON.stringify(input.resume),
+    "```",
+    "",
+    input.optimized
+      ? [
+          "Optimized version of the candidate's resume (use it to phrase experience and skills strongly, but still only use real facts):",
+          "```json",
+          JSON.stringify(input.optimized),
+          "```",
+        ].join("\n")
+      : null,
+    "",
+    "ATS analysis of the candidate's resume against this job:",
+    "```json",
+    JSON.stringify({
+      summary: input.analysis.summary,
+      atsScore: input.analysis.atsScore,
+      matchedKeywords: input.analysis.matchedKeywords,
+      missingKeywords: input.analysis.missingKeywords,
+      strengths: input.analysis.strengths,
+    }),
+    "```",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+/**
+ * Generate a personalized cover letter for a candidate applying to a job, using
+ * the parsed (and optionally optimized) resume plus the ATS analysis as context.
+ * Returns the letter body as plain text with paragraphs separated by blank lines.
+ */
+export async function generateCoverLetter(input: {
+  resume: ParsedResumeData;
+  optimized?: OptimizedResumeData;
+  job: { title: string; company: string | null; content: string };
+  analysis: AtsOutput;
+}): Promise<string> {
+  const ai = getGenAi();
+
+  const response = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: buildCoverLetterPrompt(input),
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: COVER_LETTER_SCHEMA,
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+    },
+  });
+
+  const rawText = response.text;
+  if (!rawText) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = parseJson(rawText);
+  } catch (error) {
+    console.error(
+      "[generateCoverLetter] Gemini returned invalid JSON. Raw response:",
+      rawText
+    );
+    throw error;
+  }
+
+  const parsed = coverLetterOutputSchema.parse(parsedJson);
+  const content = parsed.content.trim();
+  if (!content) {
+    console.error(
+      "[generateCoverLetter] Gemini returned an empty cover letter. Raw response:",
+      rawText
+    );
+    throw new Error("Gemini returned an empty cover letter");
+  }
+  return content;
 }

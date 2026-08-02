@@ -144,6 +144,7 @@ export function AnalysisHistory({
     if (!deleteTarget) return;
 
     setDeleting(true);
+    const toastId = toast.loading("Deleting...");
     try {
       const response = await fetch(`/api/analyses/${deleteTarget.id}`, {
         method: "DELETE",
@@ -152,11 +153,11 @@ export function AnalysisHistory({
       if (!response.ok) {
         throw new Error(data.error ?? "Failed to delete the analysis");
       }
-      toast.success("Analysis deleted");
+      toast.success("Deleted successfully", { id: toastId });
       setDeleteTarget(null);
       router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to delete the analysis");
+    } catch {
+      toast.error("Delete failed", { id: toastId });
     } finally {
       setDeleting(false);
     }

@@ -409,6 +409,7 @@ export function OptimizedResumeView({
   async function handleExport(format: ExportFormat) {
     if (exporting) return;
     setExporting(format);
+    const toastId = toast.loading(format === "pdf" ? "Generating PDF..." : "Preparing Markdown...");
     try {
       const response = await fetch(`/api/generated-resumes/${id}/export?format=${format}`);
       if (!response.ok) {
@@ -427,9 +428,9 @@ export function OptimizedResumeView({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast.success(format === "pdf" ? "PDF downloaded" : "Markdown downloaded");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to export the resume");
+      toast.success(format === "pdf" ? "PDF downloaded" : "Markdown downloaded", { id: toastId });
+    } catch {
+      toast.error("Export failed", { id: toastId });
     } finally {
       setExporting(null);
     }
@@ -475,9 +476,9 @@ export function OptimizedResumeView({
               {exporting ? (
                 <Loader2 className="animate-spin" aria-hidden="true" />
               ) : (
-                <Download aria-hidden="true" />
+                <Download data-icon="inline-start" aria-hidden="true" />
               )}
-              {exporting ? "Downloading…" : "Download"}
+              {exporting ? "Exporting…" : "Export"}
             </MenuTrigger>
             <MenuContent align="end">
               <MenuItem
