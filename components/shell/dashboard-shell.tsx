@@ -2,7 +2,7 @@
 
 import { UserButton } from "@clerk/nextjs";
 import type { LucideIcon } from "lucide-react";
-import { FilePenLine, History, LayoutDashboard, Menu, X } from "lucide-react";
+import { FilePenLine, History, LayoutDashboard, Menu, Mic, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -18,6 +18,7 @@ export type DashboardUser = {
 const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/history", label: "History", icon: History },
+  { href: "/dashboard/interviews", label: "Interviews", icon: Mic },
   { href: "/dashboard/cover-letters", label: "Cover Letters", icon: FilePenLine },
 ];
 
@@ -36,7 +37,10 @@ function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
   return (
     <nav className="flex flex-col gap-1" aria-label="Main">
       {NAV_ITEMS.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const active =
+          item.href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}

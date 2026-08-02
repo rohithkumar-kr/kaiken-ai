@@ -195,14 +195,14 @@ export function CoverLetterEditor({
             </Button>
             <Menu>
               <MenuTrigger
-                render={<Button variant="default" size="sm" disabled={exporting !== null} />}
+                render={<Button variant="outline" size="sm" disabled={exporting !== null} />}
               >
-              {exporting ? (
-                <Loader2 className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Download data-icon="inline-start" aria-hidden="true" />
-              )}
-              {exporting ? "Exporting…" : "Export"}
+                {exporting ? (
+                  <Loader2 className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download data-icon="inline-start" aria-hidden="true" />
+                )}
+                {exporting ? "Exporting…" : "Export"}
               </MenuTrigger>
               <MenuContent align="end">
                 <MenuItem

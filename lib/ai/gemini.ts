@@ -5,6 +5,12 @@ import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 import { atsOutputSchema, type AtsOutput } from "@/lib/types/analysis";
 import { coverLetterOutputSchema } from "@/lib/types/cover-letter";
 import {
+  interviewQuestionsOutputSchema,
+  type ExperienceLevel,
+  type InterviewQuestionsOutput,
+  type InterviewType,
+} from "@/lib/types/interview";
+import {
   optimizedResumeSchema,
   type OptimizedResumeData,
 } from "@/lib/types/optimize";
@@ -575,7 +581,7 @@ export async function generateCoverLetter(input: {
         responseMimeType: "application/json",
         responseJsonSchema: COVER_LETTER_SCHEMA,
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     })
   );
@@ -606,4 +612,149 @@ export async function generateCoverLetter(input: {
     throw new Error("Gemini returned an empty cover letter");
   }
   return content;
+}
+
+const INTERVIEW_QUESTIONS_SCHEMA = {
+  type: "object",
+  properties: {
+    questions: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          difficulty: { type: "string", enum: ["EASY", "MEDIUM", "HARD"] },
+          category: {
+            type: "string",
+            enum: [
+              "TECHNICAL",
+              "BEHAVIORAL",
+              "PROJECTS",
+              "RESUME",
+              "PROBLEM_SOLVING",
+              "SYSTEM_DESIGN",
+            ],
+          },
+          expectedDuration: { type: "integer", minimum: 2, maximum: 10 },
+        },
+        required: ["question", "difficulty", "category", "expectedDuration"],
+      },
+    },
+  },
+  required: ["questions"],
+} as const;
+
+function buildInterviewQuestionsPrompt(input: {
+  resume: ParsedResumeData;
+  optimized?: OptimizedResumeData;
+  job: { title: string; company: string | null; content: string };
+  interviewType: InterviewType;
+  experienceLevel: ExperienceLevel;
+}): string {
+  const experienced = ["MID", "SENIOR", "LEAD"].includes(input.experienceLevel);
+  const systemDesignGuidance = experienced
+    ? "SYSTEM_DESIGN questions are allowed for this candidate."
+    : "SYSTEM_DESIGN questions are NOT allowed for this candidate (entry/junior level).";
+  const typeGuidance: Record<InterviewType, string> = {
+    HR: "Focus the question mix on HR-style questions (background, motivation, culture fit, salary expectations) with some behavioral questions.",
+    TECHNICAL: "Focus the question mix on technical questions (skills, tools, coding concepts, architecture) with some problem solving and resume questions.",
+    BEHAVIORAL: "Focus the question mix on behavioral questions (past experiences, teamwork, conflict, leadership) with some resume questions.",
+    MIXED: "Balance the question mix across HR, technical, behavioral, projects, resume, and problem solving questions.",
+  };
+  return [
+    "You are an expert technical interviewer. Generate exactly 15 interview practice questions for a candidate targeting the role below.",
+    "",
+    "Rules:",
+    "- Generate EXACTLY 15 questions. Each question must be distinct and specific to this candidate and role.",
+    "- Use the candidate's parsed resume (and optimized resume, if provided) to personalize questions around their real experience, skills, and projects. Do not invent facts about the candidate.",
+    "- Use the job description to tailor questions to the target role, company, and required skills.",
+    "- Categories: TECHNICAL, BEHAVIORAL, PROJECTS, RESUME, PROBLEM_SOLVING, SYSTEM_DESIGN.",
+    `- ${systemDesignGuidance}`,
+    "- Difficulty: EASY, MEDIUM, or HARD. Vary the difficulty across the set.",
+    "- expectedDuration: how long (in minutes) a candidate should spend answering, between 2 and 10.",
+    "- Return ONLY valid JSON matching the provided schema.",
+    "",
+    `Interview type: ${input.interviewType}`,
+    typeGuidance[input.interviewType],
+    `Candidate experience level: ${input.experienceLevel}`,
+    "",
+    "Target job description:",
+    `Title: ${input.job.title}`,
+    input.job.company ? `Company: ${input.job.company}` : "Company: n/a",
+    "```",
+    input.job.content,
+    "```",
+    "",
+    "Candidate parsed resume:",
+    "```json",
+    JSON.stringify(input.resume),
+    "```",
+    "",
+    input.optimized
+      ? [
+          "Optimized version of the candidate's resume (use it to phrase questions around stronger wording, but still only use real facts):",
+          "```json",
+          JSON.stringify(input.optimized),
+          "```",
+        ].join("\n")
+      : null,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+/**
+ * Generate exactly 15 tailored interview practice questions for a candidate,
+ * using the parsed (and optionally optimized) resume, the job description, and
+ * the session's interview type and experience level. Returns validated
+ * structured questions (category, difficulty, expected duration).
+ */
+export async function generateInterviewQuestions(input: {
+  resume: ParsedResumeData;
+  optimized?: OptimizedResumeData;
+  job: { title: string; company: string | null; content: string };
+  interviewType: InterviewType;
+  experienceLevel: ExperienceLevel;
+}): Promise<InterviewQuestionsOutput> {
+  const ai = getGenAi();
+
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: buildInterviewQuestionsPrompt(input),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: INTERVIEW_QUESTIONS_SCHEMA,
+        temperature: 0.7,
+        maxOutputTokens: 8192,
+      },
+    })
+  );
+
+  const rawText = response.text;
+  if (!rawText) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = parseJson(rawText);
+  } catch (error) {
+    console.error(
+      "[generateInterviewQuestions] Gemini returned invalid JSON. Raw response:",
+      rawText
+    );
+    throw error;
+  }
+
+  const parsed = interviewQuestionsOutputSchema.parse(parsedJson);
+  const questions = parsed.questions.slice(0, 15);
+  if (questions.length < 15) {
+    console.error(
+      "[generateInterviewQuestions] Gemini returned fewer than 15 questions. Raw response:",
+      rawText
+    );
+    throw new Error("Gemini returned fewer than 15 questions");
+  }
+  return { questions };
 }

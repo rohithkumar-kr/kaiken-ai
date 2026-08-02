@@ -23,6 +23,7 @@ model User {
   coverLetters       CoverLetter[]
   creditTransactions CreditTransaction[]
   generatedResumes   GeneratedResume[]
+  interviewSessions  InterviewSession[]
   jobDescriptions    JobDescription[]
   resumes            Resume[]
   subscription       Subscription?
@@ -376,6 +377,67 @@ enum GenerationStatus {
 enum ResumeFormat {
   MARKDOWN
   PDF
+}
+
+model InterviewSession {
+  id               String              @id @default(cuid())
+  userId           String
+  jobRole          String
+  company          String?
+  experienceLevel  ExperienceLevel     @default(MID)
+  interviewType    InterviewType       @default(MIXED)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions        InterviewQuestion[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+model InterviewQuestion {
+  id               String            @id @default(cuid())
+  sessionId        String
+  questionNumber   Int
+  question         String
+  difficulty       QuestionDifficulty
+  category         QuestionCategory
+  expectedDuration Int
+  createdAt        DateTime          @default(now())
+  session          InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, questionNumber])
+}
+
+enum InterviewType {
+  HR
+  TECHNICAL
+  BEHAVIORAL
+  MIXED
+}
+
+enum ExperienceLevel {
+  ENTRY
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+}
+
+enum QuestionCategory {
+  TECHNICAL
+  BEHAVIORAL
+  PROJECTS
+  RESUME
+  PROBLEM_SOLVING
+  SYSTEM_DESIGN
+}
+
+enum QuestionDifficulty {
+  EASY
+  MEDIUM
+  HARD
 }
 
 enum CreditType {
