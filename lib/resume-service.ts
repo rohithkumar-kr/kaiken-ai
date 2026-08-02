@@ -138,6 +138,10 @@ async function saveParsedResume(resumeId: string, parsed: ParsedResumeData): Pro
 export async function analyzeResume(
   input: AnalyzeResumeInput
 ): Promise<{ resumeId: string; parsed: ParsedResumeData }> {
+  const downloadPromise = downloadFileBuffer(input.fileKey)
+    .then((buffer) => ({ buffer } as const))
+    .catch((error) => ({ error: error as unknown }));
+
   const user = await ensureUser(input.userId, input.email);
 
   const existing = input.resumeId
@@ -165,7 +169,9 @@ export async function analyzeResume(
     }));
 
   try {
-    const buffer = await downloadFileBuffer(input.fileKey);
+    const downloaded = await downloadPromise;
+    if ("error" in downloaded) throw downloaded.error;
+    const buffer = downloaded.buffer;
 
     let rawText = "";
     try {
@@ -186,29 +192,30 @@ export async function analyzeResume(
 
     const parsed = await extractStructuredResume(rawText, pdfBuffer);
 
-    await prisma.$transaction([
-      prisma.resume.update({
-        where: { id: resume.id },
-        data: {
-          title: input.fileName,
-          fileName: input.fileName,
-          fileKey: input.fileKey,
-          fileUrl: `https://utfs.io/f/${input.fileKey}`,
-          fileType: toFileTypeEnum(input.fileType),
-          fileSize: input.fileSize ?? resume.fileSize,
-          rawText,
-          parseStatus: "COMPLETED",
-          parseError: null,
-          isPrimary: true,
-        },
-      }),
-      prisma.resume.updateMany({
-        where: { userId: user.id, id: { not: resume.id }, isPrimary: true },
-        data: { isPrimary: false },
-      }),
+    await Promise.all([
+      prisma.$transaction([
+        prisma.resume.update({
+          where: { id: resume.id },
+          data: {
+            title: input.fileName,
+            fileName: input.fileName,
+            fileKey: input.fileKey,
+            fileUrl: `https://utfs.io/f/${input.fileKey}`,
+            fileType: toFileTypeEnum(input.fileType),
+            fileSize: input.fileSize ?? resume.fileSize,
+            rawText,
+            parseStatus: "COMPLETED",
+            parseError: null,
+            isPrimary: true,
+          },
+        }),
+        prisma.resume.updateMany({
+          where: { userId: user.id, id: { not: resume.id }, isPrimary: true },
+          data: { isPrimary: false },
+        }),
+      ]),
+      saveParsedResume(resume.id, parsed),
     ]);
-
-    await saveParsedResume(resume.id, parsed);
 
     return { resumeId: resume.id, parsed };
   } catch (error) {

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { currentUser } from "@clerk/nextjs/server";
 
+import { JobDescriptions } from "@/components/dashboard/job-descriptions";
 import { ResumeCards } from "@/components/dashboard/resume-cards";
 import { UploadZone } from "@/components/dashboard/upload-zone";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireUser } from "@/lib/auth";
+import { listJobDescriptions } from "@/lib/job-description-service";
 import { ensureUser, getLatestParsedResume, type DashboardResume } from "@/lib/resume-service";
 import type { ParsedResumeData } from "@/lib/types/resume";
 
@@ -64,6 +66,7 @@ export default async function DashboardPage() {
   );
   const latest = await getLatestParsedResume(localUser.id);
   const parsed = latest?.parsedResume ? toParsedResumeData(latest.parsedResume) : null;
+  const jobDescriptions = await listJobDescriptions(localUser.id);
 
   const firstName = clerkUser.firstName ?? clerkUser.username ?? "there";
 
@@ -90,6 +93,11 @@ export default async function DashboardPage() {
               }
             : null
         }
+      />
+
+      <JobDescriptions
+        initialJobDescriptions={jobDescriptions}
+        hasParsedResume={parsed !== null}
       />
 
       {parsed ? (

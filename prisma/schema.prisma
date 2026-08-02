@@ -179,6 +179,7 @@ model GeneratedResume {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   markdown         String
+  data             Json?
   analysis         Analysis?        @relation(fields: [analysisId], references: [id])
   jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id])
   sourceResume     Resume           @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)

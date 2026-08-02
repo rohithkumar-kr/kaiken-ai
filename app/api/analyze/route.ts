@@ -18,6 +18,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const clerkUserPromise = currentUser();
+
   let body: z.infer<typeof analyzeSchema>;
   try {
     body = analyzeSchema.parse(await request.json());
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  const clerkUser = await currentUser();
+  const clerkUser = await clerkUserPromise;
   const email = clerkUser?.primaryEmailAddress?.emailAddress ?? `${userId}@kaiken.local`;
 
   try {
