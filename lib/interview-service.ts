@@ -4,6 +4,8 @@ import { generateInterviewQuestions as generateInterviewQuestionsWithGemini } fr
 import { prisma } from "@/lib/db";
 import { parsedResumeInclude, toParsedResumeData } from "@/lib/parsed-resume";
 import type {
+  InterviewAnswerInput,
+  InterviewAnswerItem,
   InterviewQuestionItem,
   InterviewSessionInput,
   InterviewSessionItem,
@@ -232,6 +234,71 @@ export async function generateInterviewQuestions(
     orderBy: { questionNumber: "asc" },
   });
   return created.map(toQuestionItem);
+}
+
+function toAnswerItem(row: {
+  id: string;
+  questionId: string;
+  sessionId: string;
+  answer: string;
+  startedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): InterviewAnswerItem {
+  return {
+    id: row.id,
+    questionId: row.questionId,
+    sessionId: row.sessionId,
+    answer: row.answer,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** Interview answers for a session owned by the user, keyed by question. */
+export async function listInterviewAnswers(
+  userId: string,
+  sessionId: string
+): Promise<InterviewAnswerItem[]> {
+  const rows = await prisma.interviewAnswer.findMany({
+    where: { sessionId, session: { userId } },
+    orderBy: { updatedAt: "asc" },
+  });
+  return rows.map(toAnswerItem);
+}
+
+/**
+ * Upsert the answer for a question in a session owned by the user. Returns
+ * `null` when the user does not own a session that contains the question (404).
+ */
+export async function upsertInterviewAnswer(
+  userId: string,
+  sessionId: string,
+  questionId: string,
+  input: InterviewAnswerInput
+): Promise<InterviewAnswerItem | null> {
+  const question = await prisma.interviewQuestion.findFirst({
+    where: { id: questionId, sessionId, session: { userId } },
+    select: { id: true },
+  });
+  if (!question) return null;
+
+  const row = await prisma.interviewAnswer.upsert({
+    where: { questionId: question.id },
+    update: {
+      answer: input.answer,
+      ...(input.startedAt ? { startedAt: new Date(input.startedAt) } : {}),
+    },
+    create: {
+      questionId: question.id,
+      sessionId,
+      userId,
+      answer: input.answer,
+      ...(input.startedAt ? { startedAt: new Date(input.startedAt) } : {}),
+    },
+  });
+  return toAnswerItem(row);
 }
 
 const EMPTY_RESUME: ParsedResumeData = {

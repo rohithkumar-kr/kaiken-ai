@@ -23,6 +23,7 @@ model User {
   coverLetters       CoverLetter[]
   creditTransactions CreditTransaction[]
   generatedResumes   GeneratedResume[]
+  interviewAnswers   InterviewAnswer[]
   interviewSessions  InterviewSession[]
   jobDescriptions    JobDescription[]
   resumes            Resume[]
@@ -390,6 +391,7 @@ model InterviewSession {
   updatedAt        DateTime            @updatedAt
   user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   questions        InterviewQuestion[]
+  answers          InterviewAnswer[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -405,9 +407,27 @@ model InterviewQuestion {
   expectedDuration Int
   createdAt        DateTime          @default(now())
   session          InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answer           InterviewAnswer?
 
   @@index([sessionId])
   @@index([sessionId, questionNumber])
+}
+
+model InterviewAnswer {
+  id         String            @id @default(cuid())
+  questionId String            @unique
+  sessionId  String
+  userId     String
+  answer     String            @default("")
+  startedAt  DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  question   InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session    InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
 }
 
 enum InterviewType {

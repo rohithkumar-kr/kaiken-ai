@@ -198,15 +198,17 @@ export function InterviewSessionDetail({
           <div className="border-border bg-card ring-foreground/10 flex flex-col items-center gap-3 rounded-xl p-6 text-center ring-1 sm:p-8">
             <p className="text-sm font-medium">Ready to practice?</p>
             <p className="text-muted-foreground -mt-2 text-sm">
-              Start a timed mock interview and answer these questions out loud.
+              Answer each question one at a time in a timed mock interview. Your answers are saved
+              automatically.
             </p>
-            <Button variant="default" className="mt-1" disabled>
+            <Button
+              render={<Link href={`/dashboard/interviews/${session.id}/practice`} />}
+              variant="default"
+              className="mt-1"
+            >
               <Mic data-icon="inline-start" aria-hidden="true" />
-              Start Mock Interview
+              Start Interview
             </Button>
-            <Badge variant="outline" className="text-muted-foreground rounded-full">
-              Coming in Phase 3
-            </Badge>
           </div>
         </div>
       )}

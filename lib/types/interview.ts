@@ -66,3 +66,22 @@ export type InterviewSessionItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** Validates the payload for auto-saving an interview answer. */
+export const interviewAnswerInputSchema = z.object({
+  answer: z.string().max(20000, "Answer is too long."),
+  startedAt: z.string().datetime().nullish(),
+});
+
+export type InterviewAnswerInput = z.infer<typeof interviewAnswerInputSchema>;
+
+/** Shape returned to the client for a saved interview answer. */
+export type InterviewAnswerItem = {
+  id: string;
+  questionId: string;
+  sessionId: string;
+  answer: string;
+  startedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
