@@ -138,14 +138,7 @@ async function saveParsedResume(resumeId: string, parsed: ParsedResumeData): Pro
 export async function analyzeResume(
   input: AnalyzeResumeInput
 ): Promise<{ resumeId: string; parsed: ParsedResumeData }> {
-  // [TEMP-DEBUG] stage logging — remove after diagnosing
-  const logStage = (stage: string, ...args: unknown[]) =>
-    console.log(`[analyzeResume:${stage}]`, new Date().toISOString(), ...args);
-
-  logStage("1-user", { userId: input.userId, email: input.email, resumeId: input.resumeId ?? null });
-
   const user = await ensureUser(input.userId, input.email);
-  logStage("1-user", "done", { id: user.id, email: user.email });
 
   const existing = input.resumeId
     ? await prisma.resume.findFirst({
@@ -170,34 +163,29 @@ export async function analyzeResume(
         parseStatus: "PROCESSING",
       },
     }));
-  logStage("1-user", "resume", { resumeId: resume.id, existing: !!existing });
 
   try {
-    logStage("2-download", { fileKey: input.fileKey });
     const buffer = await downloadFileBuffer(input.fileKey);
-    logStage("2-download", "done", { bytes: buffer.byteLength });
 
-    logStage("3-extract", { fileType: input.fileType });
-    const rawText = await extractTextFromBuffer(buffer, input.fileType);
-    logStage("3-extract", "done", { chars: rawText.length, preview: rawText.slice(0, 200) });
+    let rawText = "";
+    try {
+      rawText = await extractTextFromBuffer(buffer, input.fileType);
+    } catch (error) {
+      if (input.fileType !== "pdf") throw error;
+      console.error(
+        "[analyzeResume:extract] PDF text extraction failed; continuing with the original PDF.",
+        error
+      );
+    }
 
-    if (!rawText.trim()) {
+    const pdfBuffer = input.fileType === "pdf" ? buffer : undefined;
+
+    if (!rawText.trim() && !pdfBuffer) {
       throw new Error("No readable text was found in this file");
     }
 
-    logStage("4-gemini-request", { chars: rawText.length });
-    const parsed = await extractStructuredResume(rawText);
+    const parsed = await extractStructuredResume(rawText, pdfBuffer);
 
-    logStage("5-gemini-response", {
-      name: parsed.name,
-      skills: parsed.skills.length,
-      experience: parsed.experience.length,
-      projects: parsed.projects.length,
-      education: parsed.education.length,
-      certifications: parsed.certifications.length,
-    });
-
-    logStage("6-prisma-save", { resumeId: resume.id, mode: existing ? "update" : "create" });
     await prisma.$transaction([
       prisma.resume.update({
         where: { id: resume.id },
@@ -221,7 +209,6 @@ export async function analyzeResume(
     ]);
 
     await saveParsedResume(resume.id, parsed);
-    logStage("6-prisma-save", "done", { resumeId: resume.id });
 
     return { resumeId: resume.id, parsed };
   } catch (error) {

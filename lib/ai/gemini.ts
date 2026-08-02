@@ -1,6 +1,6 @@
 import "server-only";
 
-import { GoogleGenAI } from "@google/genai";
+import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 
 import { parsedResumeSchema, type ParsedResumeData } from "@/lib/types/resume";
 
@@ -9,24 +9,23 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const RESUME_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
-    name: { type: "string" },
-    email: { type: "string" },
-    phone: { type: "string" },
-    summary: { type: "string" },
+    name: { type: ["string", "null"] },
+    email: { type: ["string", "null"] },
+    phone: { type: ["string", "null"] },
+    summary: { type: ["string", "null"] },
     skills: { type: "array", items: { type: "string" } },
     experience: {
       type: "array",
       items: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          company: { type: "string" },
-          location: { type: "string" },
-          startDate: { type: "string" },
-          endDate: { type: "string" },
-          description: { type: "string" },
+          title: { type: ["string", "null"] },
+          company: { type: ["string", "null"] },
+          location: { type: ["string", "null"] },
+          startDate: { type: ["string", "null"] },
+          endDate: { type: ["string", "null"] },
+          description: { type: ["string", "null"] },
         },
-        required: ["title"],
       },
     },
     projects: {
@@ -34,14 +33,13 @@ const RESUME_OUTPUT_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name: { type: "string" },
-          description: { type: "string" },
+          name: { type: ["string", "null"] },
+          description: { type: ["string", "null"] },
           technologies: { type: "array", items: { type: "string" } },
-          url: { type: "string" },
-          startDate: { type: "string" },
-          endDate: { type: "string" },
+          url: { type: ["string", "null"] },
+          startDate: { type: ["string", "null"] },
+          endDate: { type: ["string", "null"] },
         },
-        required: ["name"],
       },
     },
     education: {
@@ -49,14 +47,13 @@ const RESUME_OUTPUT_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          institution: { type: "string" },
-          degree: { type: "string" },
-          fieldOfStudy: { type: "string" },
-          startDate: { type: "string" },
-          endDate: { type: "string" },
-          grade: { type: "string" },
+          institution: { type: ["string", "null"] },
+          degree: { type: ["string", "null"] },
+          fieldOfStudy: { type: ["string", "null"] },
+          startDate: { type: ["string", "null"] },
+          endDate: { type: ["string", "null"] },
+          grade: { type: ["string", "null"] },
         },
-        required: ["institution"],
       },
     },
     certifications: {
@@ -64,45 +61,36 @@ const RESUME_OUTPUT_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          name: { type: "string" },
-          issuer: { type: "string" },
-          date: { type: "string" },
-          url: { type: "string" },
+          name: { type: ["string", "null"] },
+          issuer: { type: ["string", "null"] },
+          date: { type: ["string", "null"] },
+          url: { type: ["string", "null"] },
         },
-        required: ["name"],
       },
     },
   },
-  required: [
-    "name",
-    "email",
-    "phone",
-    "summary",
-    "skills",
-    "experience",
-    "projects",
-    "education",
-    "certifications",
-  ],
+  required: ["skills", "experience", "projects", "education", "certifications"],
 } as const;
 
-function buildPrompt(text: string): string {
-  return [
-    "You are an expert resume parser. Extract structured information from the resume text below.",
+function buildPrompt(text: string, hasPdf: boolean): string {
+  const lines = [
+    hasPdf
+      ? "You are an expert resume parser. Analyze the attached PDF resume and extract structured information from it."
+      : "You are an expert resume parser. Extract structured information from the resume text below.",
     "",
     "Rules:",
     "- Return ONLY valid JSON matching the provided schema.",
     '- For "skills", return a flat array of individual skill names (e.g. "React", "TypeScript").',
     '- For "experience"/"projects"/"education"/"certifications", preserve original order.',
-    "- Use null for any missing field. Do not invent information.",
+    "- Use JSON null for any field that is not present. Do not invent information.",
+    '- Never use placeholder text such as "..." or "N/A" — use null or an empty array instead.',
     "- Keep descriptions concise but faithful to the source.",
     "- Use ISO date strings (YYYY-MM) when a month/year is available, otherwise the text as-is.",
-    "",
-    "Resume text:",
-    "```",
-    text.slice(0, 60_000),
-    "```",
-  ].join("\n");
+  ];
+  if (text.trim()) {
+    lines.push("", "Reference text extracted from the PDF (may be incomplete):", "```", text.slice(0, 60_000), "```");
+  }
+  return lines.join("\n");
 }
 
 function getGenAi(): GoogleGenAI {
@@ -131,15 +119,28 @@ function parseJson(text: string): unknown {
 }
 
 /**
- * Send the extracted resume text to Gemini and receive a validated,
- * structured resume object.
+ * Send resume content to Gemini and receive a validated, structured resume object.
+ *
+ * When `pdfBuffer` is provided (PDF uploads), the original PDF is attached to the
+ * request so Gemini can read it directly. This is more reliable than relying on
+ * text extraction, especially for scanned or image-based PDFs.
  */
-export async function extractStructuredResume(text: string): Promise<ParsedResumeData> {
+export async function extractStructuredResume(
+  text: string,
+  pdfBuffer?: Buffer
+): Promise<ParsedResumeData> {
   const ai = getGenAi();
+
+  const parts = pdfBuffer
+    ? [
+        { text: buildPrompt(text, true) },
+        createPartFromBase64(pdfBuffer.toString("base64"), "application/pdf"),
+      ]
+    : [{ text: buildPrompt(text, false) }];
 
   const response = await ai.models.generateContent({
     model: GEMINI_MODEL,
-    contents: buildPrompt(text),
+    contents: [{ role: "user", parts }],
     config: {
       responseMimeType: "application/json",
       responseJsonSchema: RESUME_OUTPUT_SCHEMA,
