@@ -12,6 +12,89 @@ import { parsedResumeSchema, type ParsedResumeData } from "@/lib/types/resume";
 
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 
+const GEMINI_MODELS = [
+  ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : []),
+  "models/gemini-flash-latest",
+  "models/gemini-2.0-flash",
+].filter((model, index, all) => all.indexOf(model) === index);
+
+type GeminiError = {
+  status?: number;
+  message?: string;
+};
+
+function toGeminiError(error: unknown): GeminiError {
+  if (typeof error === "object" && error !== null) {
+    return error as GeminiError;
+  }
+  return {};
+}
+
+/**
+ * Decide whether a failed model attempt should be retried with the next model
+ * in the list. Only transient availability problems trigger a retry:
+ * - 429 RESOURCE_EXHAUSTED (quota / rate limit)
+ * - 404 NOT_FOUND (deprecated or unavailable model)
+ * - 503 UNAVAILABLE (transient service outage)
+ *
+ * Everything else (400/401/403 auth or request errors, malformed responses,
+ * schema/validation failures) is NOT retried and propagates immediately.
+ */
+function shouldTryNextModel(error: unknown): boolean {
+  const { status } = toGeminiError(error);
+  if (status === 429 || status === 404 || status === 503) {
+    return true;
+  }
+  return false;
+}
+
+function formatFailureReason(error: unknown): string {
+  const { status, message } = toGeminiError(error);
+  if (status == null) {
+    return String(error ?? "unknown error");
+  }
+  return `${status} ${message ?? ""}`.trim();
+}
+
+async function generateWithFallback<T>(
+  run: (model: string) => Promise<T>
+): Promise<T> {
+  const failures: Array<{ model: string; error: unknown }> = [];
+  let lastError: unknown;
+
+  for (const model of GEMINI_MODELS) {
+    console.log(`[Gemini] Trying model ${model}`);
+    try {
+      const result = await run(model);
+      console.log(`[Gemini] Success using ${model}`);
+      return result;
+    } catch (error) {
+      lastError = error;
+      failures.push({ model, error });
+      if (shouldTryNextModel(error)) {
+        const { status } = toGeminiError(error);
+        if (status === 404) {
+          console.log(`[Gemini] Model unavailable (404). Trying next...`);
+        } else if (status === 503) {
+          console.log(`[Gemini] Service unavailable (503). Trying next...`);
+        } else {
+          console.log(`[Gemini] Quota exhausted (429). Trying next...`);
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  console.error("[Gemini] All models exhausted. Attempts:");
+  for (const failure of failures) {
+    console.error(
+      `[Gemini]   ${failure.model} -> ${formatFailureReason(failure.error)}`
+    );
+  }
+  throw lastError;
+}
+
 const RESUME_OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -144,16 +227,18 @@ export async function extractStructuredResume(
       ]
     : [{ text: buildPrompt(text, false) }];
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: [{ role: "user", parts }],
-    config: {
-      responseMimeType: "application/json",
-      responseJsonSchema: RESUME_OUTPUT_SCHEMA,
-      temperature: 0.1,
-      maxOutputTokens: 8192,
-    },
-  });
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: [{ role: "user", parts }],
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: RESUME_OUTPUT_SCHEMA,
+        temperature: 0.1,
+        maxOutputTokens: 8192,
+      },
+    })
+  );
 
   const rawText = response.text;
   if (!rawText) {
@@ -264,16 +349,18 @@ export async function analyzeResumeForJob(
 ): Promise<AtsOutput> {
   const ai = getGenAi();
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: buildAtsPrompt(resume, job),
-    config: {
-      responseMimeType: "application/json",
-      responseJsonSchema: ATS_OUTPUT_SCHEMA,
-      temperature: 0.2,
-      maxOutputTokens: 8192,
-    },
-  });
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: buildAtsPrompt(resume, job),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: ATS_OUTPUT_SCHEMA,
+        temperature: 0.2,
+        maxOutputTokens: 8192,
+      },
+    })
+  );
 
   const rawText = response.text;
   if (!rawText) {
@@ -384,16 +471,18 @@ export async function optimizeResumeForJob(
 ): Promise<OptimizedResumeData> {
   const ai = getGenAi();
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: buildOptimizePrompt(resume, job, analysis),
-    config: {
-      responseMimeType: "application/json",
-      responseJsonSchema: OPTIMIZE_OUTPUT_SCHEMA,
-      temperature: 0.3,
-      maxOutputTokens: 8192,
-    },
-  });
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: buildOptimizePrompt(resume, job, analysis),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: OPTIMIZE_OUTPUT_SCHEMA,
+        temperature: 0.3,
+        maxOutputTokens: 8192,
+      },
+    })
+  );
 
   const rawText = response.text;
   if (!rawText) {
@@ -478,16 +567,18 @@ export async function generateCoverLetter(input: {
 }): Promise<string> {
   const ai = getGenAi();
 
-  const response = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: buildCoverLetterPrompt(input),
-    config: {
-      responseMimeType: "application/json",
-      responseJsonSchema: COVER_LETTER_SCHEMA,
-      temperature: 0.7,
-      maxOutputTokens: 2048,
-    },
-  });
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: buildCoverLetterPrompt(input),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: COVER_LETTER_SCHEMA,
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    })
+  );
 
   const rawText = response.text;
   if (!rawText) {
