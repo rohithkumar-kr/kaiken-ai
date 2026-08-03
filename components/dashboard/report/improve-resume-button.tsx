@@ -7,9 +7,28 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 
+const OPTIMIZE_FAILED = {
+  title: "Couldn't optimize your resume",
+  description:
+    "Something went wrong while optimizing your resume. Please try again in a few moments.",
+} as const;
+
+type OptimizeResponse = {
+  generatedResumeId?: string;
+  title?: string;
+  description?: string;
+};
+
 export function ImproveResumeButton({ analysisId }: { analysisId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  function showOptimizeError(toastId: string | number, title?: string, description?: string) {
+    toast.error(title ?? OPTIMIZE_FAILED.title, {
+      id: toastId,
+      description: description ?? OPTIMIZE_FAILED.description,
+    });
+  }
 
   async function handleImprove() {
     if (loading) return;
@@ -20,18 +39,22 @@ export function ImproveResumeButton({ analysisId }: { analysisId: string }) {
       const response = await fetch(`/api/analyses/${analysisId}/optimize`, {
         method: "POST",
       });
-      const data = (await response.json()) as { generatedResumeId?: string; error?: string };
+      const data = (await response.json()) as OptimizeResponse;
       if (!response.ok) {
-        throw new Error(data.error ?? "Failed to optimize the resume");
+        showOptimizeError(toastId, data.title, data.description);
+        setLoading(false);
+        return;
       }
       if (!data.generatedResumeId) {
-        throw new Error("No optimized resume was returned");
+        showOptimizeError(toastId);
+        setLoading(false);
+        return;
       }
       toast.loading("Preparing optimized resume...", { id: toastId });
       toast.success("Optimized resume ready", { id: toastId });
       router.push(`/dashboard/optimized/${data.generatedResumeId}`);
     } catch {
-      toast.error("Optimization failed", { id: toastId });
+      showOptimizeError(toastId);
       setLoading(false);
     }
   }

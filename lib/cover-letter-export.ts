@@ -31,6 +31,21 @@ export function letterParagraphs(content: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * True when the letter body already ends with the candidate's signature line
+ * (e.g. "...Sincerely,\n<candidate name>"). Gemini is instructed to end the
+ * letter with a formal closing followed by the candidate's name, so the body
+ * already carries the signature. When that is the case we must NOT append the
+ * candidate name again in the closing block, otherwise it is printed twice.
+ */
+function contentHasSignature(content: string, candidateName: string): boolean {
+  const paragraphs = letterParagraphs(content);
+  if (paragraphs.length === 0) return false;
+  const last = paragraphs[paragraphs.length - 1].trim().toLowerCase();
+  const name = candidateName.trim().toLowerCase();
+  return name.length > 0 && last.endsWith(name);
+}
+
 /** Render a cover letter as clean, GitHub-compatible markdown. */
 export function buildCoverLetterMarkdown(data: CoverLetterExportData): string {
   const lines: string[] = [];
@@ -203,13 +218,16 @@ export async function buildCoverLetterPdf(data: CoverLetterExportData): Promise<
   });
   drawResumeFooter(doc, 1);
 
-  const hasClosing = Boolean(data.candidateName);
+  const candidateName = data.candidateName?.trim() ?? null;
+  const hasClosing = candidateName
+    ? !contentHasSignature(data.content, candidateName)
+    : false;
 
   const usableHeight = BOTTOM_LIMIT - MARGIN;
-  const closingHeight = hasClosing
+  const closingHeight = hasClosing && candidateName
     ? (() => {
         doc.font("Helvetica-Bold").fontSize(TYPE.body);
-        return textHeight(doc, data.candidateName as string, { lineBreak: false }) + CLOSING_GAP;
+        return textHeight(doc, candidateName, { lineBreak: false }) + CLOSING_GAP;
       })()
     : 0;
 
@@ -237,9 +255,9 @@ export async function buildCoverLetterPdf(data: CoverLetterExportData): Promise<
   drawLetterHeader(doc, data, headerScale);
   drawParagraphs(doc, data.content, lineGap, paraGap);
 
-  if (hasClosing) {
+  if (hasClosing && candidateName) {
     doc.fillColor(COLOR.ink).font("Helvetica-Bold").fontSize(TYPE.body);
-    doc.text(data.candidateName as string, MARGIN, doc.y, { lineBreak: false });
+    doc.text(candidateName, MARGIN, doc.y, { lineBreak: false });
   }
 
   doc.end();
