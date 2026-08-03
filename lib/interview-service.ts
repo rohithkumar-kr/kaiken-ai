@@ -6,12 +6,21 @@ import {
   GEMINI_MODEL,
 } from "@/lib/ai/gemini";
 import { prisma } from "@/lib/db";
+import {
+  buildInterviewSummary,
+  HIRING_RECOMMENDATION_LABELS,
+  hiringRecommendation,
+  REPORT_CATEGORY_ORDER,
+} from "@/lib/interview-report";
 import { parsedResumeInclude, toParsedResumeData } from "@/lib/parsed-resume";
 import type {
   InterviewAnswerInput,
   InterviewAnswerItem,
   InterviewEvaluationItem,
   InterviewQuestionItem,
+  InterviewReport,
+  InterviewReportCategoryScore,
+  InterviewReportQuestion,
   InterviewSessionInput,
   InterviewSessionItem,
 } from "@/lib/types/interview";
@@ -24,6 +33,9 @@ function toItem(row: {
   company: string | null;
   experienceLevel: InterviewSessionItem["experienceLevel"];
   interviewType: InterviewSessionItem["interviewType"];
+  overallScore: number | null;
+  completedAt: Date | null;
+  reportGeneratedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): InterviewSessionItem {
@@ -33,6 +45,9 @@ function toItem(row: {
     company: row.company,
     experienceLevel: row.experienceLevel,
     interviewType: row.interviewType,
+    overallScore: row.overallScore,
+    completedAt: row.completedAt?.toISOString() ?? null,
+    reportGeneratedAt: row.reportGeneratedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -444,4 +459,238 @@ export async function evaluateInterviewAnswer(
     throw new Error("Failed to persist the evaluation.");
   }
   return { status: "evaluated", evaluation: persisted };
+}
+
+type ReportSource =
+  | { status: "not_found" }
+  | { status: "not_ready" }
+  | {
+      status: "ready";
+      session: {
+        id: string;
+        jobRole: string;
+        company: string | null;
+        experienceLevel: InterviewSessionItem["experienceLevel"];
+        interviewType: InterviewSessionItem["interviewType"];
+        overallScore: number | null;
+        completedAt: Date | null;
+        reportGeneratedAt: Date | null;
+      };
+      questions: {
+        id: string;
+        questionNumber: number;
+        question: string;
+        difficulty: InterviewQuestionItem["difficulty"];
+        category: InterviewQuestionItem["category"];
+        expectedDuration: number;
+      }[];
+      answers: {
+        questionId: string;
+        answer: string;
+        evaluationScore: number | null;
+        strengths: unknown;
+        weaknesses: unknown;
+        suggestions: unknown;
+        evaluatedAt: Date | null;
+      }[];
+    };
+
+/** Load the data a report needs for a session owned by the user. */
+async function loadReportSource(userId: string, sessionId: string): Promise<ReportSource> {
+  const session = await prisma.interviewSession.findFirst({ where: { id: sessionId, userId } });
+  if (!session) return { status: "not_found" };
+
+  const [questions, answers] = await Promise.all([
+    prisma.interviewQuestion.findMany({
+      where: { sessionId },
+      orderBy: { questionNumber: "asc" },
+    }),
+    prisma.interviewAnswer.findMany({ where: { sessionId } }),
+  ]);
+
+  const evaluated = answers.filter(
+    (answer) => answer.evaluationScore !== null && answer.evaluatedAt !== null
+  );
+  if (evaluated.length === 0) return { status: "not_ready" };
+
+  return {
+    status: "ready",
+    session,
+    questions: questions.map((question) => ({
+      id: question.id,
+      questionNumber: question.questionNumber,
+      question: question.question,
+      difficulty: question.difficulty,
+      category: question.category,
+      expectedDuration: question.expectedDuration,
+    })),
+    answers: evaluated.map((answer) => ({
+      questionId: answer.questionId,
+      answer: answer.answer,
+      evaluationScore: answer.evaluationScore,
+      strengths: answer.strengths,
+      weaknesses: answer.weaknesses,
+      suggestions: answer.suggestions,
+      evaluatedAt: answer.evaluatedAt,
+    })),
+  };
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+/** Rank recurring items across evaluations, most frequent first (tie-broken by first appearance). */
+function recurringItems(lists: string[][]): string[] {
+  const byKey = new Map<string, { text: string; count: number; firstSeen: number }>();
+  lists.forEach((list, firstSeen) => {
+    for (const raw of list) {
+      const text = raw.trim();
+      if (!text) continue;
+      const key = text.toLowerCase();
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        byKey.set(key, { text, count: 1, firstSeen });
+      }
+    }
+  });
+
+  const ranked = [...byKey.values()].sort(
+    (a, b) => b.count - a.count || a.firstSeen - b.firstSeen
+  );
+  const recurring = ranked.filter((item) => item.count >= 2);
+  const rest = ranked.filter((item) => item.count < 2);
+  return [...recurring, ...rest].slice(0, 5).map((item) => item.text);
+}
+
+function roundScore(value: number): number {
+  return Math.round(value);
+}
+
+/** Deterministically build the report from stored evaluations (no AI). */
+function buildInterviewReport(source: Extract<ReportSource, { status: "ready" }>): InterviewReport {
+  const scores = source.answers.map((answer) => answer.evaluationScore ?? 0);
+  const overallScore = roundScore(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+
+  const categoryMap = new Map<InterviewQuestionItem["category"], number[]>();
+  for (const question of source.questions) {
+    const answer = source.answers.find((candidate) => candidate.questionId === question.id);
+    if (!answer) continue;
+    const existing = categoryMap.get(question.category) ?? [];
+    existing.push(answer.evaluationScore ?? 0);
+    categoryMap.set(question.category, existing);
+  }
+
+  const categoryScores: InterviewReportCategoryScore[] = REPORT_CATEGORY_ORDER.filter(
+    (category) => categoryMap.has(category)
+  ).map((category) => {
+    const values = categoryMap.get(category) ?? [];
+    return {
+      category,
+      score: roundScore(values.reduce((sum, score) => sum + score, 0) / values.length),
+      questionCount: values.length,
+    };
+  });
+
+  const strengths = recurringItems(source.answers.map((answer) => stringList(answer.strengths)));
+  const weaknesses = recurringItems(source.answers.map((answer) => stringList(answer.weaknesses)));
+  const recommendations = recurringItems(
+    source.answers.map((answer) => stringList(answer.suggestions))
+  );
+
+  const recommendation = hiringRecommendation(overallScore);
+  const summary = buildInterviewSummary({
+    overallScore,
+    hiringLabel: HIRING_RECOMMENDATION_LABELS[recommendation],
+    categoryScores,
+    strengths,
+    weaknesses,
+  });
+
+  const questions: InterviewReportQuestion[] = source.questions
+    .map((question) => {
+      const answer = source.answers.find((candidate) => candidate.questionId === question.id);
+      if (!answer) return null;
+      return {
+        questionId: question.id,
+        questionNumber: question.questionNumber,
+        question: question.question,
+        difficulty: question.difficulty,
+        category: question.category,
+        expectedDuration: question.expectedDuration,
+        score: answer.evaluationScore ?? 0,
+        answer: answer.answer,
+      };
+    })
+    .filter((question): question is InterviewReportQuestion => question !== null);
+
+  return {
+    sessionId: source.session.id,
+    jobRole: source.session.jobRole,
+    company: source.session.company,
+    experienceLevel: source.session.experienceLevel,
+    interviewType: source.session.interviewType,
+    overallScore,
+    hiringRecommendation: recommendation,
+    categoryScores,
+    strengths,
+    weaknesses,
+    recommendations,
+    summary,
+    questions,
+    completedAt: source.session.completedAt?.toISOString() ?? null,
+    reportGeneratedAt: source.session.reportGeneratedAt?.toISOString() ?? null,
+  };
+}
+
+/**
+ * Read the interview report for a session owned by the user, computed
+ * deterministically from stored evaluations. Returns `null` when the session
+ * does not exist or no answers have been evaluated yet. Read-only.
+ */
+export async function getInterviewReport(
+  userId: string,
+  sessionId: string
+): Promise<InterviewReport | null> {
+  const source = await loadReportSource(userId, sessionId);
+  if (source.status !== "ready") return null;
+  return buildInterviewReport(source);
+}
+
+/**
+ * Generate the interview report for a session owned by the user. The report is
+ * computed once: the overall score and completion timestamps are persisted the
+ * first time it is generated, and the stored report is returned afterwards.
+ *
+ * Returns `{ status: "not_found" }` when the user does not own the session
+ * (404), or `{ status: "not_ready" }` when no answers have been evaluated yet.
+ */
+export async function generateInterviewReport(
+  userId: string,
+  sessionId: string
+): Promise<
+  | { status: "report"; report: InterviewReport }
+  | { status: "not_found" }
+  | { status: "not_ready" }
+> {
+  const source = await loadReportSource(userId, sessionId);
+  if (source.status === "not_found") return { status: "not_found" };
+  if (source.status === "not_ready") return { status: "not_ready" };
+
+  const report = buildInterviewReport(source);
+
+  if (!source.session.reportGeneratedAt) {
+    const now = new Date();
+    await prisma.interviewSession.update({
+      where: { id: source.session.id },
+      data: { overallScore: report.overallScore, completedAt: now, reportGeneratedAt: now },
+    });
+    report.completedAt = now.toISOString();
+    report.reportGeneratedAt = now.toISOString();
+  }
+
+  return { status: "report", report };
 }

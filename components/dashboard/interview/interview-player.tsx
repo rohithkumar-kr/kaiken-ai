@@ -304,7 +304,7 @@ export function InterviewPlayer({
         description: "Your answers were saved to this session.",
       });
       setFinishOpen(false);
-      router.push(`/dashboard/interviews/${session.id}`);
+      router.push(`/dashboard/interviews/${session.id}/report`);
       router.refresh();
     } finally {
       setFinishing(false);

@@ -45,7 +45,7 @@ function getStatus(score: number) {
   return STATUS.find((status) => score >= status.min) ?? STATUS[STATUS.length - 1];
 }
 
-export function ScoreGauge({ score }: { score: number }) {
+export function ScoreGauge({ score, label = "ATS Score" }: { score: number; label?: string }) {
   const status = getStatus(score);
   const reduce = useReducedMotion();
   const progress = useSpring(0, { stiffness: 55, damping: 22 });
@@ -90,7 +90,7 @@ export function ScoreGauge({ score }: { score: number }) {
             {reduce ? score : number}
           </motion.span>
           <span className="text-muted-foreground mt-1 text-[0.65rem] font-medium tracking-widest uppercase">
-            ATS Score
+            {label}
           </span>
         </div>
       </div>

@@ -381,17 +381,20 @@ enum ResumeFormat {
 }
 
 model InterviewSession {
-  id               String              @id @default(cuid())
-  userId           String
-  jobRole          String
-  company          String?
-  experienceLevel  ExperienceLevel     @default(MID)
-  interviewType    InterviewType       @default(MIXED)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questions        InterviewQuestion[]
-  answers          InterviewAnswer[]
+  id                String              @id @default(cuid())
+  userId            String
+  jobRole           String
+  company           String?
+  experienceLevel   ExperienceLevel     @default(MID)
+  interviewType     InterviewType       @default(MIXED)
+  overallScore      Int?
+  completedAt       DateTime?
+  reportGeneratedAt DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions         InterviewQuestion[]
+  answers           InterviewAnswer[]
 
   @@index([userId])
   @@index([userId, createdAt])

@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  FileText,
   Loader2,
   Mic,
   Sparkles,
@@ -157,6 +158,32 @@ export function InterviewSessionDetail({
           value={formatDate(session.createdAt)}
         />
       </div>
+
+      {session.reportGeneratedAt ? (
+        <div className="border-border bg-card ring-foreground/10 flex flex-col gap-4 rounded-xl p-6 ring-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <span className="border-border bg-muted grid size-12 shrink-0 place-items-center rounded-full border">
+              <FileText className="text-muted-foreground size-6" aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Latest Report</p>
+              <p className="text-muted-foreground -mt-0.5 text-xs">
+                {session.overallScore !== null
+                  ? `${session.overallScore} / 100 overall`
+                  : "Generated"}{" "}
+                · {formatDate(session.completedAt ?? session.reportGeneratedAt)}
+              </p>
+            </div>
+          </div>
+          <Button
+            render={<Link href={`/dashboard/interviews/${session.id}/report`} />}
+            variant="outline"
+            className="shrink-0"
+          >
+            View Report
+          </Button>
+        </div>
+      ) : null}
 
       {questions.length === 0 ? (
         <div className="border-border bg-card ring-foreground/10 flex flex-col items-center gap-4 rounded-xl p-10 text-center ring-1 sm:p-14">

@@ -85,8 +85,61 @@ export type InterviewSessionItem = {
   company: string | null;
   experienceLevel: ExperienceLevel;
   interviewType: InterviewType;
+  overallScore: number | null;
+  completedAt: string | null;
+  reportGeneratedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * Hiring recommendation derived from the overall interview score.
+ * `>=90` Strong Hire, `80-89` Hire, `70-79` Consider, `60-69` Needs
+ * Improvement, `<60` Not Ready.
+ */
+export type HiringRecommendation =
+  | "STRONG_HIRE"
+  | "HIRE"
+  | "CONSIDER"
+  | "NEEDS_IMPROVEMENT"
+  | "NOT_READY";
+
+/** Average evaluation score for one question category. */
+export type InterviewReportCategoryScore = {
+  category: QuestionCategory;
+  score: number;
+  questionCount: number;
+};
+
+/** One evaluated question in the report breakdown. */
+export type InterviewReportQuestion = {
+  questionId: string;
+  questionNumber: number;
+  question: string;
+  difficulty: QuestionDifficulty;
+  category: QuestionCategory;
+  expectedDuration: number;
+  score: number;
+  answer: string;
+};
+
+/** Full interview performance report, computed from stored evaluations. */
+export type InterviewReport = {
+  sessionId: string;
+  jobRole: string;
+  company: string | null;
+  experienceLevel: ExperienceLevel;
+  interviewType: InterviewType;
+  overallScore: number;
+  hiringRecommendation: HiringRecommendation;
+  categoryScores: InterviewReportCategoryScore[];
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  summary: string;
+  questions: InterviewReportQuestion[];
+  completedAt: string | null;
+  reportGeneratedAt: string | null;
 };
 
 /** Validates the payload for auto-saving an interview answer. */
