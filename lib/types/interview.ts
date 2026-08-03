@@ -44,6 +44,28 @@ export const interviewQuestionsOutputSchema = z.object({
 
 export type InterviewQuestionsOutput = z.infer<typeof interviewQuestionsOutputSchema>;
 
+/** Validates the JSON structure returned by the Gemini answer evaluation step. */
+export const interviewEvaluationOutputSchema = z.object({
+  score: z.number().int().min(0).max(100).catch(0),
+  strengths: z.array(z.string().min(1)).catch([]),
+  weaknesses: z.array(z.string().min(1)).catch([]),
+  suggestions: z.array(z.string().min(1)).catch([]),
+  idealAnswer: z.string().catch(""),
+});
+
+export type InterviewEvaluationOutput = z.infer<typeof interviewEvaluationOutputSchema>;
+
+/** Shape returned to the client for a persisted answer evaluation. */
+export type InterviewEvaluationItem = {
+  score: number;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+  idealAnswer: string;
+  modelVersion: string | null;
+  evaluatedAt: string;
+};
+
 /** Shape returned to the client for a saved interview question. */
 export type InterviewQuestionItem = {
   id: string;
@@ -82,6 +104,7 @@ export type InterviewAnswerItem = {
   sessionId: string;
   answer: string;
   startedAt: string | null;
+  evaluation: InterviewEvaluationItem | null;
   createdAt: string;
   updatedAt: string;
 };

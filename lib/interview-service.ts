@@ -1,11 +1,16 @@
 import "server-only";
 
-import { generateInterviewQuestions as generateInterviewQuestionsWithGemini } from "@/lib/ai/gemini";
+import {
+  generateInterviewEvaluation,
+  generateInterviewQuestions as generateInterviewQuestionsWithGemini,
+  GEMINI_MODEL,
+} from "@/lib/ai/gemini";
 import { prisma } from "@/lib/db";
 import { parsedResumeInclude, toParsedResumeData } from "@/lib/parsed-resume";
 import type {
   InterviewAnswerInput,
   InterviewAnswerItem,
+  InterviewEvaluationItem,
   InterviewQuestionItem,
   InterviewSessionInput,
   InterviewSessionItem,
@@ -139,9 +144,10 @@ export async function listInterviewQuestions(
 /**
  * Generate AI interview questions for a session owned by the user.
  *
- * Loads the interview session, the latest parsed resume, the latest completed
- * ATS analysis (plus its optimized resume when available) and the job
- * description, calls Gemini, persists all questions, and returns them.
+ * Loads the interview session, the latest parsed resume, and the latest
+ * completed ATS analysis (plus its optimized resume when available), calls
+ * Gemini, persists all questions, and returns them. The interview is targeted
+ * at the session's own job role and company — never another job description.
  *
  * Generation happens once: if questions already exist they are returned
  * instead of generating again.
@@ -163,7 +169,7 @@ export async function generateInterviewQuestions(
   });
   if (existing.length > 0) return existing.map(toQuestionItem);
 
-  const [resume, analysis, latestJob] = await Promise.all([
+  const [resume, analysis] = await Promise.all([
     prisma.resume.findFirst({
       where: { userId, parseStatus: "COMPLETED", parsedResume: { isNot: null } },
       orderBy: { updatedAt: "desc" },
@@ -173,7 +179,6 @@ export async function generateInterviewQuestions(
       where: { userId, status: "COMPLETED" },
       orderBy: { analyzedAt: "desc" },
       include: {
-        jobDescription: { select: { title: true, company: true, content: true } },
         generatedResumes: {
           where: { status: "COMPLETED" },
           orderBy: { createdAt: "desc" },
@@ -182,18 +187,12 @@ export async function generateInterviewQuestions(
         },
       },
     }),
-    prisma.jobDescription.findFirst({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-      select: { title: true, company: true, content: true },
-    }),
   ]);
 
-  const job = analysis?.jobDescription ?? latestJob;
   const jobContext = {
-    title: job?.title ?? session.jobRole,
-    company: job?.company ?? session.company,
-    content: job?.content ?? "No job description was provided for this role.",
+    title: session.jobRole,
+    company: session.company,
+    content: "No job description was provided for this role.",
   };
 
   let optimizedData: OptimizedResumeData | undefined;
@@ -236,12 +235,40 @@ export async function generateInterviewQuestions(
   return created.map(toQuestionItem);
 }
 
+function toEvaluationItem(row: {
+  evaluationScore: number | null;
+  strengths: unknown;
+  weaknesses: unknown;
+  suggestions: unknown;
+  idealAnswer: string | null;
+  evaluationModelVersion: string | null;
+  evaluatedAt: Date | null;
+}): InterviewEvaluationItem | null {
+  if (!row.evaluatedAt || row.evaluationScore === null) return null;
+  return {
+    score: row.evaluationScore,
+    strengths: (row.strengths as unknown as string[] | null) ?? [],
+    weaknesses: (row.weaknesses as unknown as string[] | null) ?? [],
+    suggestions: (row.suggestions as unknown as string[] | null) ?? [],
+    idealAnswer: row.idealAnswer ?? "",
+    modelVersion: row.evaluationModelVersion,
+    evaluatedAt: row.evaluatedAt.toISOString(),
+  };
+}
+
 function toAnswerItem(row: {
   id: string;
   questionId: string;
   sessionId: string;
   answer: string;
   startedAt: Date | null;
+  evaluationScore: number | null;
+  strengths: unknown;
+  weaknesses: unknown;
+  suggestions: unknown;
+  idealAnswer: string | null;
+  evaluationModelVersion: string | null;
+  evaluatedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): InterviewAnswerItem {
@@ -251,6 +278,7 @@ function toAnswerItem(row: {
     sessionId: row.sessionId,
     answer: row.answer,
     startedAt: row.startedAt?.toISOString() ?? null,
+    evaluation: toEvaluationItem(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -312,3 +340,108 @@ const EMPTY_RESUME: ParsedResumeData = {
   education: [],
   certifications: [],
 };
+
+/**
+ * Load the persisted evaluation for one answer in a session owned by the user.
+ * Returns `null` when the question does not exist for this session or has not
+ * been evaluated yet.
+ */
+export async function getInterviewAnswerEvaluation(
+  userId: string,
+  sessionId: string,
+  questionId: string
+): Promise<InterviewEvaluationItem | null> {
+  const answer = await prisma.interviewAnswer.findFirst({
+    where: { questionId, sessionId, session: { userId } },
+  });
+  if (!answer) return null;
+  return toEvaluationItem(answer);
+}
+
+/**
+ * Evaluate one interview answer for a session owned by the user.
+ *
+ * Loads the session, question, latest parsed resume and job description, calls
+ * Gemini, and persists the structured evaluation on the answer row.
+ *
+ * Generation happens once: if the answer already has an evaluation it is
+ * returned instead of generating again.
+ *
+ * Returns `{ status: "not_found" }` when the user does not own a session that
+ * contains the question (404), or `{ status: "empty" }` when the answer has no
+ * content to evaluate (400).
+ */
+export async function evaluateInterviewAnswer(
+  userId: string,
+  sessionId: string,
+  questionId: string
+): Promise<
+  | { status: "evaluated"; evaluation: InterviewEvaluationItem }
+  | { status: "not_found" }
+  | { status: "empty" }
+> {
+  const [session, question, answer] = await Promise.all([
+    prisma.interviewSession.findFirst({ where: { id: sessionId, userId } }),
+    prisma.interviewQuestion.findFirst({
+      where: { id: questionId, sessionId, session: { userId } },
+    }),
+    prisma.interviewAnswer.findFirst({
+      where: { questionId, sessionId, session: { userId } },
+    }),
+  ]);
+  if (!session || !question || !answer) {
+    return { status: "not_found" };
+  }
+
+  if (!answer.answer.trim()) {
+    return { status: "empty" };
+  }
+
+  const existing = toEvaluationItem(answer);
+  if (existing) {
+    return { status: "evaluated", evaluation: existing };
+  }
+
+  const resume = await prisma.resume.findFirst({
+    where: { userId, parseStatus: "COMPLETED", parsedResume: { isNot: null } },
+    orderBy: { updatedAt: "desc" },
+    include: parsedResumeInclude,
+  });
+
+  const job = {
+    title: session.jobRole,
+    company: session.company,
+    content: "No job description was provided for this role.",
+  };
+
+  const evaluation = await generateInterviewEvaluation({
+    resume: resume?.parsedResume ? toParsedResumeData(resume.parsedResume) : EMPTY_RESUME,
+    job,
+    question: {
+      question: question.question,
+      difficulty: question.difficulty,
+      category: question.category,
+      expectedDuration: question.expectedDuration,
+    },
+    answer: answer.answer,
+  });
+
+  const updated = await prisma.interviewAnswer.update({
+    where: { id: answer.id },
+    data: {
+      evaluationScore: evaluation.score,
+      strengths: evaluation.strengths,
+      weaknesses: evaluation.weaknesses,
+      suggestions: evaluation.suggestions,
+      idealAnswer: evaluation.idealAnswer,
+      evaluationModelVersion: GEMINI_MODEL,
+      evaluatedAt: new Date(),
+    },
+  });
+
+  const persisted = toEvaluationItem(updated);
+  if (!persisted) {
+    throw new Error("Failed to persist the evaluation.");
+  }
+  return { status: "evaluated", evaluation: persisted };
+}

@@ -414,17 +414,24 @@ model InterviewQuestion {
 }
 
 model InterviewAnswer {
-  id         String            @id @default(cuid())
-  questionId String            @unique
-  sessionId  String
-  userId     String
-  answer     String            @default("")
-  startedAt  DateTime?
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  question   InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  session    InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String            @id @default(cuid())
+  questionId            String            @unique
+  sessionId             String
+  userId                String
+  answer                String            @default("")
+  startedAt             DateTime?
+  evaluationScore       Int?
+  strengths             Json?
+  weaknesses            Json?
+  suggestions           Json?
+  idealAnswer           String?
+  evaluationModelVersion String?
+  evaluatedAt           DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  question              InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session               InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([userId])

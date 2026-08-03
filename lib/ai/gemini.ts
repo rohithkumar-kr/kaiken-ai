@@ -5,10 +5,14 @@ import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 import { atsOutputSchema, type AtsOutput } from "@/lib/types/analysis";
 import { coverLetterOutputSchema } from "@/lib/types/cover-letter";
 import {
+  interviewEvaluationOutputSchema,
   interviewQuestionsOutputSchema,
   type ExperienceLevel,
+  type InterviewEvaluationOutput,
   type InterviewQuestionsOutput,
   type InterviewType,
+  type QuestionCategory,
+  type QuestionDifficulty,
 } from "@/lib/types/interview";
 import {
   optimizedResumeSchema,
@@ -757,4 +761,115 @@ export async function generateInterviewQuestions(input: {
     throw new Error("Gemini returned fewer than 15 questions");
   }
   return { questions };
+}
+
+const INTERVIEW_EVALUATION_SCHEMA = {
+  type: "object",
+  properties: {
+    score: { type: "integer", minimum: 0, maximum: 100 },
+    strengths: { type: "array", items: { type: "string" } },
+    weaknesses: { type: "array", items: { type: "string" } },
+    suggestions: { type: "array", items: { type: "string" } },
+    idealAnswer: { type: "string" },
+  },
+  required: ["score", "strengths", "weaknesses", "suggestions", "idealAnswer"],
+} as const;
+
+function buildInterviewEvaluationPrompt(input: {
+  resume: ParsedResumeData;
+  job: { title: string; company: string | null; content: string };
+  question: {
+    question: string;
+    difficulty: QuestionDifficulty;
+    category: QuestionCategory;
+    expectedDuration: number;
+  };
+  answer: string;
+}): string {
+  return [
+    "You are an expert technical interviewer and career coach. Evaluate the candidate's answer to a single interview practice question.",
+    "",
+    "Rules:",
+    "- Be specific and constructive. Base strengths and weaknesses only on the candidate's actual answer, the resume, and the role.",
+    "- Score the answer 0-100 for how well it addresses the question for this role and level.",
+    "- strengths: 2-4 short, specific things the answer did well.",
+    "- weaknesses: 2-4 short, specific areas where the answer fell short or was missing.",
+    "- suggestions: 2-4 concrete, actionable tips the candidate can apply to improve this answer.",
+    "- idealAnswer: a strong model answer to the question (concise, structured, specific to this candidate and role). Do not invent facts about the candidate.",
+    "- Return ONLY valid JSON matching the provided schema.",
+    "",
+    "Target job:",
+    `Title: ${input.job.title}`,
+    input.job.company ? `Company: ${input.job.company}` : "Company: n/a",
+    "```",
+    input.job.content,
+    "```",
+    "",
+    "Candidate parsed resume:",
+    "```json",
+    JSON.stringify(input.resume),
+    "```",
+    "",
+    "Question being evaluated:",
+    `Category: ${input.question.category}`,
+    `Difficulty: ${input.question.difficulty}`,
+    `Expected duration: ${input.question.expectedDuration} minutes`,
+    input.question.question,
+    "",
+    "Candidate's answer:",
+    input.answer,
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+/**
+ * Evaluate a candidate's answer to one interview practice question, using the
+ * question context, the candidate's answer, the target job and the parsed
+ * resume. Returns validated structured feedback (score, strengths, weaknesses,
+ * suggestions, and an ideal answer).
+ */
+export async function generateInterviewEvaluation(input: {
+  resume: ParsedResumeData;
+  job: { title: string; company: string | null; content: string };
+  question: {
+    question: string;
+    difficulty: QuestionDifficulty;
+    category: QuestionCategory;
+    expectedDuration: number;
+  };
+  answer: string;
+}): Promise<InterviewEvaluationOutput> {
+  const ai = getGenAi();
+
+  const response = await generateWithFallback((model) =>
+    ai.models.generateContent({
+      model,
+      contents: buildInterviewEvaluationPrompt(input),
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: INTERVIEW_EVALUATION_SCHEMA,
+        temperature: 0.4,
+        maxOutputTokens: 8192,
+      },
+    })
+  );
+
+  const rawText = response.text;
+  if (!rawText) {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = parseJson(rawText);
+  } catch (error) {
+    console.error(
+      "[generateInterviewEvaluation] Gemini returned invalid JSON. Raw response:",
+      rawText
+    );
+    throw error;
+  }
+
+  return interviewEvaluationOutputSchema.parse(parsedJson);
 }

@@ -9,12 +9,14 @@ import {
   Flag,
   Loader2,
   Mic,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { InterviewEvaluationPanel } from "@/components/dashboard/interview/interview-evaluation-panel";
 import {
   CATEGORY_LABELS,
   categoryTone,
@@ -36,6 +38,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   InterviewAnswerItem,
+  InterviewEvaluationItem,
   InterviewQuestionItem,
   InterviewSessionItem,
 } from "@/lib/types/interview";
@@ -54,6 +57,48 @@ function saveErrorForStatus(status: number): string | null {
   if (status === 404) return "Interview question not found.";
   if (status >= 500) return "Unable to save your answer.";
   return null;
+}
+
+/** Product-friendly toast copy for an evaluation failure, keyed by HTTP status. */
+function evaluationErrorForStatus(
+  status: number,
+  data: { title?: string; description?: string; error?: string }
+): { title: string; description?: string } {
+  if (status === 401) {
+    return { title: "Your session expired", description: "Please sign in again." };
+  }
+  if (status === 404) {
+    return {
+      title: "Interview question not found",
+      description: "This question may have been removed.",
+    };
+  }
+  if (status === 400) {
+    return {
+      title: "Nothing to evaluate",
+      description: data.error ?? "Write your answer before requesting feedback.",
+    };
+  }
+  if (status === 429) {
+    return {
+      title: data.title ?? "AI service temporarily unavailable",
+      description: data.description ?? "Please wait a moment before trying again.",
+    };
+  }
+  if (status === 503) {
+    return {
+      title: data.title ?? "Our AI service is busy right now",
+      description:
+        data.description ??
+        "We're experiencing higher than usual demand. Please try again shortly.",
+    };
+  }
+  return {
+    title: data.title ?? "Couldn't evaluate your answer",
+    description:
+      data.description ??
+      "Something went wrong while evaluating your answer. Please try again in a few moments.",
+  };
 }
 
 export function InterviewPlayer({
@@ -87,6 +132,16 @@ export function InterviewPlayer({
   const [dirty, setDirty] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+  const [evaluations, setEvaluations] = useState<Record<string, InterviewEvaluationItem>>(() => {
+    const initial: Record<string, InterviewEvaluationItem> = {};
+    for (const answer of initialAnswers) {
+      if (answer.evaluation) {
+        initial[answer.questionId] = answer.evaluation;
+      }
+    }
+    return initial;
+  });
 
   const answersRef = useRef(answers);
   const startedAtRef = useRef(startedAt);
@@ -256,12 +311,93 @@ export function InterviewPlayer({
     }
   }
 
+  async function handleEvaluate() {
+    if (evaluating) return;
+    const current = questions[currentIndex];
+    const answer = (answers[current.id] ?? "").trim();
+    if (!answer) {
+      toast.error("Nothing to evaluate", {
+        description: "Write your answer before requesting feedback.",
+      });
+      return;
+    }
+
+    setEvaluating(true);
+    const toastId = toast.loading("Evaluating your answer...");
+    try {
+      // Persist the latest draft first so the server evaluates the newest text.
+      await flushSave();
+
+      const response = await fetch(`/api/interviews/${session.id}/evaluate/${current.id}`, {
+        method: "POST",
+      });
+
+      if (response.redirected) {
+        toast.error("Evaluating failed", {
+          id: toastId,
+          description: "Your session expired. Please sign in again.",
+        });
+        router.push("/sign-in");
+        return;
+      }
+
+      const contentType = response.headers.get("Content-Type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Authentication required");
+      }
+
+      const data = (await response.json()) as {
+        evaluation?: InterviewEvaluationItem;
+        title?: string;
+        description?: string;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        const { title, description } = evaluationErrorForStatus(response.status, data);
+        toast.error(title, { id: toastId, description });
+        return;
+      }
+
+      if (!data.evaluation) {
+        toast.error("Couldn't evaluate your answer", {
+          id: toastId,
+          description:
+            "Something went wrong while evaluating your answer. Please try again in a few moments.",
+        });
+        return;
+      }
+
+      setEvaluations((previous) => ({ ...previous, [current.id]: data.evaluation as InterviewEvaluationItem }));
+      toast.success("Feedback ready", {
+        id: toastId,
+        description: "Review the evaluation for this answer.",
+      });
+    } catch (error) {
+      const isNetworkFailure = error instanceof TypeError;
+      toast.error("Couldn't evaluate your answer", {
+        id: toastId,
+        description: isNetworkFailure
+          ? "Unable to reach the server."
+          : error instanceof Error
+            ? error.message
+            : "Something went wrong while evaluating your answer. Please try again in a few moments.",
+      });
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   const expectedSeconds = question.expectedDuration * 60;
   const start = startedAt[questionId];
   const elapsed = start ? Math.floor((now - new Date(start).getTime()) / 1000) : 0;
   const remaining = Math.max(0, expectedSeconds - elapsed);
   const isLast = currentIndex === total - 1;
   const progress = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+
+  const hasAnswer = (answers[questionId] ?? "").trim().length > 0;
+  const hasEvaluation = Boolean(evaluations[questionId]);
+  const nextBlocked = hasAnswer && !hasEvaluation;
 
   return (
     <div className="flex flex-col gap-6">
@@ -346,6 +482,50 @@ export function InterviewPlayer({
             </div>
           </div>
 
+          <div className="flex flex-col gap-3 border-t pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Answer feedback</p>
+                <p className="text-muted-foreground -mt-0.5 text-xs">
+                  {hasEvaluation
+                    ? "Your evaluation for this answer."
+                    : "Get feedback on this answer before moving on."}
+                </p>
+              </div>
+              {!hasEvaluation ? (
+                <Button
+                  onClick={() => void handleEvaluate()}
+                  disabled={evaluating || !hasAnswer}
+                  aria-label="Get feedback on this answer"
+                >
+                  {evaluating ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Sparkles aria-hidden="true" />
+                  )}
+                  {evaluating ? "Evaluating…" : "Get Feedback"}
+                </Button>
+              ) : null}
+            </div>
+
+            {evaluating ? (
+              <Card className="border-border bg-card ring-foreground/10 ring-1">
+                <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
+                  <Loader2
+                    className="text-muted-foreground animate-spin size-6"
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm font-medium">Evaluating your answer…</p>
+                  <p className="text-muted-foreground -mt-2 text-xs">
+                    This usually takes a few seconds.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : hasEvaluation && evaluations[questionId] ? (
+              <InterviewEvaluationPanel evaluation={evaluations[questionId]} />
+            ) : null}
+          </div>
+
           <div className="flex items-center justify-between gap-3 border-t pt-4">
             <Button
               variant="outline"
@@ -355,13 +535,18 @@ export function InterviewPlayer({
               <ChevronLeft data-icon="inline-start" aria-hidden="true" />
               Previous
             </Button>
+            {!isLast && nextBlocked ? (
+              <span className="text-muted-foreground text-center text-xs">
+                Get feedback before moving to the next question.
+              </span>
+            ) : null}
             {isLast ? (
               <Button onClick={() => setFinishOpen(true)}>
                 <Flag data-icon="inline-start" aria-hidden="true" />
                 Finish Interview
               </Button>
             ) : (
-              <Button onClick={() => goTo(currentIndex + 1)}>
+              <Button onClick={() => goTo(currentIndex + 1)} disabled={nextBlocked}>
                 Next
                 <ChevronRight data-icon="inline-end" aria-hidden="true" />
               </Button>
