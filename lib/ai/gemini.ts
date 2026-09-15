@@ -24,8 +24,8 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 
 const GEMINI_MODELS = [
   ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : []),
-  "models/gemini-flash-latest",
-  "models/gemini-2.0-flash",
+  "gemini-3.6-flash",
+  "gemini-2.5-flash",
 ].filter((model, index, all) => all.indexOf(model) === index);
 
 type GeminiError = {

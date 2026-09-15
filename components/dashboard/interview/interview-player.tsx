@@ -9,6 +9,7 @@ import {
   Flag,
   Loader2,
   Mic,
+  MicOff,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import type {
   InterviewAnswerItem,
   InterviewEvaluationItem,
@@ -113,6 +115,10 @@ export function InterviewPlayer({
   const router = useRouter();
   const total = questions.length;
   const storageKey = `kaiken.interview.index.${session.id}`;
+
+  const speech = useSpeechRecognition();
+  const speechListening = speech.status === "listening";
+  const speechProcessing = speech.status === "processing";
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -194,6 +200,48 @@ export function InterviewPlayer({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // When a voice turn completes, append the transcript to the current answer.
+  // The result stays fully editable and flows through the existing auto-save.
+  useEffect(() => {
+    if (speech.status !== "completed" || !speech.transcript) return;
+    const current = questions[currentIndex];
+    if (!current) return;
+    const existing = answers[current.id] ?? "";
+    const merged = existing.trim()
+      ? `${existing.trim()} ${speech.transcript}`
+      : speech.transcript;
+    handleAnswerChange(merged);
+    speech.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.status]);
+
+  // Surface friendly, product-copy toasts for the common voice errors.
+  useEffect(() => {
+    if (!speech.error) return;
+    if (speech.error === "permission-denied") {
+      toast.error("Microphone access denied", {
+        description:
+          "Please allow microphone access in your browser to use voice input.",
+      });
+    } else if (speech.error === "no-speech") {
+      toast.error("No speech detected", {
+        description: "Speak into your microphone and try again.",
+      });
+    } else if (speech.error === "network") {
+      toast.error("Voice recognition is unavailable", {
+        description: "Check your connection and try again.",
+      });
+    }
+  }, [speech.error]);
+
+  function toggleSpeech() {
+    if (speechListening) {
+      speech.stop();
+    } else {
+      speech.start();
+    }
+  }
 
   async function persistAnswer(
     questionIdToSave: string,
@@ -457,6 +505,54 @@ export function InterviewPlayer({
           <p className="text-lg leading-relaxed font-medium">{question.question}</p>
 
           <div className="flex flex-col gap-1.5">
+            <div className="flex min-h-8 items-center justify-between gap-2">
+              {speech.isSupported ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "gap-1.5 text-muted-foreground hover:text-foreground",
+                    speechListening && "text-primary hover:text-primary"
+                  )}
+                  onClick={() => void toggleSpeech()}
+                  disabled={speechProcessing}
+                  aria-label={
+                    speechListening ? "Stop voice input" : "Start voice input"
+                  }
+                >
+                  {speechProcessing ? (
+                    <Loader2 className="animate-spin size-4" aria-hidden="true" />
+                  ) : (
+                    <Mic
+                      className={cn(
+                        "size-4",
+                        speechListening && "animate-pulse"
+                      )}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {speechListening ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+                      <span className="text-primary" aria-hidden="true">
+                        🎤
+                      </span>
+                      Listening…
+                    </span>
+                  ) : speechProcessing ? (
+                    <span className="text-xs font-medium">Processing…</span>
+                  ) : (
+                    <span className="text-xs font-medium">Voice input</span>
+                  )}
+                </Button>
+              ) : (
+                <span className="text-muted-foreground inline-flex items-center gap-1.5 text-xs">
+                  <MicOff className="size-3.5" aria-hidden="true" />
+                  Voice input is not supported in your browser.
+                </span>
+              )}
+            </div>
+
             <Textarea
               value={answers[questionId] ?? ""}
               onChange={(event) => void handleAnswerChange(event.target.value)}
