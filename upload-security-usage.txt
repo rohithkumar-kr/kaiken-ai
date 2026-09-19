@@ -1,0 +1,28 @@
+﻿
+Path                                      LineNumber Line                                                              
+----                                      ---------- ----                                                              
+D:\kaiken-ai\app\api\uploadthing\core.ts           2 import { createUploadthing, type FileRouter } from "uploadthing...
+D:\kaiken-ai\app\api\uploadthing\core.ts           4 const f = createUploadthing();                                    
+D:\kaiken-ai\app\api\uploadthing\core.ts           8     pdf: { maxFileSize: "16MB", maxFileCount: 1 },                
+D:\kaiken-ai\app\api\uploadthing\core.ts          10       maxFileSize: "16MB",                                        
+D:\kaiken-ai\app\api\uploadthing\route.ts          1 import { createRouteHandler } from "uploadthing/next";            
+D:\kaiken-ai\lib\ai\gemini.ts                    245         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\ai\gemini.ts                    367         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\ai\gemini.ts                    489         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\ai\gemini.ts                    585         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\ai\gemini.ts                    730         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\ai\gemini.ts                    850         responseMimeType: "application/json",                     
+D:\kaiken-ai\lib\parse\text.ts                     3 import mammoth from "mammoth";                                    
+D:\kaiken-ai\lib\parse\text.ts                     4 import { PDFParse } from "pdf-parse";                             
+D:\kaiken-ai\lib\parse\text.ts                    11  * - PDF  → pdf-parse (PDF.js) `getText()`                        
+D:\kaiken-ai\lib\parse\text.ts                    12  * - DOCX → Mammoth `extractRawText()`                            
+D:\kaiken-ai\lib\parse\text.ts                    28   const result = await mammoth.extractRawText({ buffer });        
+D:\kaiken-ai\lib\env.ts                            9   // M3: UPLOADTHING_TOKEN                                        
+D:\kaiken-ai\lib\resume-service.ts                 6 import { utapi } from "@/lib/uploadthing-server";                 
+D:\kaiken-ai\lib\resume-service.ts                46   const bytes = await response.arrayBuffer();                     
+D:\kaiken-ai\lib\resume-service.ts               134  * 3. Downloads the file from UploadThing and extracts text.      
+D:\kaiken-ai\lib\uploadthing-client.ts             1 import { genUploader } from "uploadthing/client";                 
+D:\kaiken-ai\lib\uploadthing-client.ts             3 import type { OurFileRouter } from "@/app/api/uploadthing/core";  
+D:\kaiken-ai\lib\uploadthing-server.ts             3 import { UTApi } from "uploadthing/server";                       
+
+

@@ -25,8 +25,14 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 const GEMINI_MODELS = [
   ...(process.env.GEMINI_MODEL ? [process.env.GEMINI_MODEL] : []),
   "gemini-3.6-flash",
-  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
 ].filter((model, index, all) => all.indexOf(model) === index);
+
+// Keep retries bounded so a provider outage does not leave the user waiting
+// through several long-running requests before the fallback model is tried.
+const MAX_RETRIES_PER_MODEL = 2;
+const INITIAL_RETRY_DELAY_MS = 1_500;
+const MAX_RETRY_DELAY_MS = 4_000;
 
 type GeminiError = {
   status?: number;
@@ -40,22 +46,62 @@ function toGeminiError(error: unknown): GeminiError {
   return {};
 }
 
+function isRetryableGeminiError(error: unknown): boolean {
+  const { status } = toGeminiError(error);
+
+  return (
+    status === 408 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
+}
+
+function getRetryDelayMs(attempt: number): number {
+  const exponentialDelay =
+    INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+
+  // Small jitter prevents many simultaneous requests from retrying together.
+  const jitter = Math.floor(Math.random() * 500);
+
+  return Math.min(exponentialDelay + jitter, MAX_RETRY_DELAY_MS);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
- * Decide whether a failed model attempt should be retried with the next model
- * in the list. Only transient availability problems trigger a retry:
- * - 429 RESOURCE_EXHAUSTED (quota / rate limit)
- * - 404 NOT_FOUND (deprecated or unavailable model)
- * - 503 UNAVAILABLE (transient service outage)
+ * Decide whether a failed model attempt should be retried with the same model.
  *
- * Everything else (400/401/403 auth or request errors, malformed responses,
- * schema/validation failures) is NOT retried and propagates immediately.
+ * Transient errors are retried with exponential backoff:
+ * - 408 REQUEST_TIMEOUT
+ * - 429 RESOURCE_EXHAUSTED (quota / rate limit)
+ * - 500 INTERNAL
+ * - 502 BAD_GATEWAY
+ * - 503 UNAVAILABLE (temporary service overload/outage)
+ * - 504 GATEWAY_TIMEOUT
+ *
+ * A 404 means the model is unavailable/deprecated, so there is no value in
+ * retrying it. The caller moves directly to the next configured model.
+ *
+ * Retries are intentionally bounded. AI provider calls can themselves take
+ * many seconds when a provider is overloaded, so excessive retries can make
+ * the UI appear stuck. The next model is used after the bounded retry budget.
+ *
+ * Everything else (400/401/403 request or authentication errors, malformed
+ * responses, schema/validation failures, etc.) propagates immediately.
  */
+function shouldRetrySameModel(error: unknown): boolean {
+  return isRetryableGeminiError(error);
+}
+
 function shouldTryNextModel(error: unknown): boolean {
   const { status } = toGeminiError(error);
-  if (status === 429 || status === 404 || status === 503) {
-    return true;
-  }
-  return false;
+
+  return status === 404 || isRetryableGeminiError(error);
 }
 
 function formatFailureReason(error: unknown): string {
@@ -63,6 +109,7 @@ function formatFailureReason(error: unknown): string {
   if (status == null) {
     return String(error ?? "unknown error");
   }
+
   return `${status} ${message ?? ""}`.trim();
 }
 
@@ -74,25 +121,58 @@ async function generateWithFallback<T>(
 
   for (const model of GEMINI_MODELS) {
     console.log(`[Gemini] Trying model ${model}`);
-    try {
-      const result = await run(model);
-      console.log(`[Gemini] Success using ${model}`);
-      return result;
-    } catch (error) {
-      lastError = error;
-      failures.push({ model, error });
-      if (shouldTryNextModel(error)) {
+
+    for (let attempt = 1; attempt <= MAX_RETRIES_PER_MODEL; attempt++) {
+      try {
+        const result = await run(model);
+
+        console.log(
+          `[Gemini] Success using ${model} on attempt ${attempt}`
+        );
+
+        return result;
+      } catch (error) {
+        lastError = error;
+        failures.push({ model, error });
+
         const { status } = toGeminiError(error);
+        const retryable = shouldRetrySameModel(error);
+        const isLastAttempt = attempt === MAX_RETRIES_PER_MODEL;
+
         if (status === 404) {
-          console.log(`[Gemini] Model unavailable (404). Trying next...`);
-        } else if (status === 503) {
-          console.log(`[Gemini] Service unavailable (503). Trying next...`);
-        } else {
-          console.log(`[Gemini] Quota exhausted (429). Trying next...`);
+          console.log(
+            `[Gemini] Model unavailable (404). Trying next model...`
+          );
+          break;
         }
-        continue;
+
+        if (!retryable) {
+          console.error(
+            `[Gemini] Non-retryable error from ${model}: ${formatFailureReason(error)}`
+          );
+          throw error;
+        }
+
+        if (isLastAttempt) {
+          console.log(
+            `[Gemini] ${model} exhausted ${MAX_RETRIES_PER_MODEL} attempts. Trying next model...`
+          );
+          break;
+        }
+
+        const delayMs = getRetryDelayMs(attempt);
+
+        console.log(
+          `[Gemini] ${model} returned ${status ?? "a transient error"}. ` +
+            `Retrying in ${delayMs}ms (attempt ${attempt + 1}/${MAX_RETRIES_PER_MODEL})...`
+        );
+
+        await sleep(delayMs);
       }
-      throw error;
+    }
+
+    if (lastError && shouldTryNextModel(lastError)) {
+      continue;
     }
   }
 
@@ -102,7 +182,18 @@ async function generateWithFallback<T>(
       `[Gemini]   ${failure.model} -> ${formatFailureReason(failure.error)}`
     );
   }
-  throw lastError;
+
+  if (lastError) {
+    const reason = formatFailureReason(lastError);
+
+    throw new Error(
+      `All configured Gemini models are temporarily unavailable. ` +
+        `Last error: ${reason}. Please try again in a moment.`,
+      { cause: lastError }
+    );
+  }
+
+  throw new Error("All configured Gemini models failed.");
 }
 
 const RESUME_OUTPUT_SCHEMA = {

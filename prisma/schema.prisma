@@ -126,7 +126,7 @@ model Analysis {
   grammarScore     Int?
   processingTime   Int?
   weaknesses       Json?
-  jobDescription   JobDescription?   @relation(fields: [jobDescriptionId], references: [id])
+  jobDescription   JobDescription?   @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
   resume           Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   generatedResumes GeneratedResume[]
@@ -184,9 +184,9 @@ model GeneratedResume {
   updatedAt        DateTime         @updatedAt
   markdown         String
   data             Json?
-  analysis         Analysis?        @relation(fields: [analysisId], references: [id])
+  analysis         Analysis?        @relation(fields: [analysisId], references: [id], onDelete: SetNull)
   coverLetters     CoverLetter[]
-  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id])
+  jobDescription   JobDescription?  @relation(fields: [jobDescriptionId], references: [id], onDelete: SetNull)
   sourceResume     Resume           @relation(fields: [sourceResumeId], references: [id], onDelete: Cascade)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -196,19 +196,19 @@ model GeneratedResume {
 }
 
 model CoverLetter {
-  id                String            @id @default(cuid())
+  id                String           @id @default(cuid())
   userId            String
   analysisId        String
   generatedResumeId String?
   content           String
-  status            GenerationStatus  @default(COMPLETED)
+  status            GenerationStatus @default(COMPLETED)
   error             String?
   modelVersion      String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  analysis          Analysis          @relation(fields: [analysisId], references: [id], onDelete: Cascade)
-  generatedResume   GeneratedResume?  @relation(fields: [generatedResumeId], references: [id])
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  analysis          Analysis         @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  generatedResume   GeneratedResume? @relation(fields: [generatedResumeId], references: [id], onDelete: SetNull)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -250,18 +250,18 @@ model ParsedResume {
 }
 
 model Skill {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   parsedResumeId String
   name           String
   category       String?
-  order          Int           @default(0)
-  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+  parsedResume   ParsedResume @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
 
   @@index([parsedResumeId])
 }
 
 model Experience {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   parsedResumeId String
   title          String
   company        String?
@@ -269,14 +269,14 @@ model Experience {
   startDate      String?
   endDate        String?
   description    String?
-  order          Int           @default(0)
-  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+  parsedResume   ParsedResume @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
 
   @@index([parsedResumeId])
 }
 
 model Project {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   parsedResumeId String
   name           String
   description    String?
@@ -284,14 +284,14 @@ model Project {
   url            String?
   startDate      String?
   endDate        String?
-  order          Int           @default(0)
-  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+  parsedResume   ParsedResume @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
 
   @@index([parsedResumeId])
 }
 
 model Education {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   parsedResumeId String
   institution    String
   degree         String?
@@ -299,21 +299,21 @@ model Education {
   startDate      String?
   endDate        String?
   grade          String?
-  order          Int           @default(0)
-  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+  parsedResume   ParsedResume @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
 
   @@index([parsedResumeId])
 }
 
 model Certification {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   parsedResumeId String
   name           String
   issuer         String?
   date           String?
   url            String?
-  order          Int           @default(0)
-  parsedResume   ParsedResume  @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
+  order          Int          @default(0)
+  parsedResume   ParsedResume @relation(fields: [parsedResumeId], references: [id], onDelete: Cascade)
 
   @@index([parsedResumeId])
 }
@@ -401,15 +401,15 @@ model InterviewSession {
 }
 
 model InterviewQuestion {
-  id               String            @id @default(cuid())
+  id               String             @id @default(cuid())
   sessionId        String
   questionNumber   Int
   question         String
   difficulty       QuestionDifficulty
   category         QuestionCategory
   expectedDuration Int
-  createdAt        DateTime          @default(now())
-  session          InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime           @default(now())
+  session          InterviewSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   answer           InterviewAnswer?
 
   @@index([sessionId])
@@ -417,24 +417,24 @@ model InterviewQuestion {
 }
 
 model InterviewAnswer {
-  id                    String            @id @default(cuid())
-  questionId            String            @unique
-  sessionId             String
-  userId                String
-  answer                String            @default("")
-  startedAt             DateTime?
-  evaluationScore       Int?
-  strengths             Json?
-  weaknesses            Json?
-  suggestions           Json?
-  idealAnswer           String?
+  id                     String            @id @default(cuid())
+  questionId             String            @unique
+  sessionId              String
+  userId                 String
+  answer                 String            @default("")
+  startedAt              DateTime?
+  evaluationScore        Int?
+  strengths              Json?
+  weaknesses             Json?
+  suggestions            Json?
+  idealAnswer            String?
   evaluationModelVersion String?
-  evaluatedAt           DateTime?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  question              InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  session               InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user                  User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluatedAt            DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  question               InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  session                InterviewSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([userId])

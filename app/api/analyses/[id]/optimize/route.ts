@@ -1,8 +1,10 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 
+import { apiErrorResponse } from "@/lib/api-error";
 import { createOptimizedResume } from "@/lib/optimize-service";
 import { ensureUser } from "@/lib/resume-service";
+import { checkAiRateLimit } from "@/lib/rate-limit";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -24,32 +26,90 @@ const OPTIMIZE_ERRORS = {
 } as const;
 
 function aiServiceStatus(error: unknown): 429 | 503 | null {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("status" in error)
+  ) {
     return null;
   }
+
   const status = (error as { status?: unknown }).status;
+
   return status === 429 || status === 503 ? status : null;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
-  const [{ userId }, { id }] = await Promise.all([auth(), context.params]);
+  const [{ userId }, { id }] = await Promise.all([
+    auth(),
+    context.params,
+  ]);
+
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
   }
 
-  const clerkUser = await currentUser();
-  const localUser = await ensureUser(
-    userId,
-    clerkUser?.primaryEmailAddress?.emailAddress ?? `${userId}@kaiken.local`
-  );
+  const rateLimit = await checkAiRateLimit(userId);
+
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      {
+        error: "Too many AI requests. Please try again later.",
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(
+            Math.max(
+              1,
+              Math.ceil(
+                (rateLimit.reset - Date.now()) / 1000
+              )
+            )
+          ),
+        },
+      }
+    );
+  }
 
   try {
-    const { generatedResumeId } = await createOptimizedResume(localUser.id, id);
-    return NextResponse.json({ generatedResumeId }, { status: 201 });
+    const clerkUser = await currentUser();
+
+    const localUser = await ensureUser(
+      userId,
+      clerkUser?.primaryEmailAddress?.emailAddress ??
+        `${userId}@kaiken.local`
+    );
+
+    const { generatedResumeId } = await createOptimizedResume(
+      localUser.id,
+      id
+    );
+
+    return NextResponse.json(
+      { generatedResumeId },
+      { status: 201 }
+    );
   } catch (error) {
-    const status = aiServiceStatus(error) ?? 500;
-    const { title, description } = OPTIMIZE_ERRORS[status];
     console.error("[optimize:POST] Failed", error);
-    return NextResponse.json({ title, description }, { status });
+
+    const status = aiServiceStatus(error);
+
+    if (status !== null) {
+      const { title, description } = OPTIMIZE_ERRORS[status];
+
+      return NextResponse.json(
+        { title, description },
+        { status }
+      );
+    }
+
+    return apiErrorResponse(error, {
+      fallbackMessage:
+        "Something went wrong while optimizing your resume. Please try again in a few moments.",
+    });
   }
 }

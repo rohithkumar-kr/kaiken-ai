@@ -1,0 +1,78 @@
+﻿
+Path                                        LineNumber Line                                                            
+----                                        ---------- ----                                                            
+D:\kaiken-ai\lib\analysis-service.ts                27   return prisma.resume.findFirst({                              
+D:\kaiken-ai\lib\analysis-service.ts                89     prisma.jobDescription.findFirst({                           
+D:\kaiken-ai\lib\analysis-service.ts               110   const analysis = await prisma.analysis.create({               
+D:\kaiken-ai\lib\analysis-service.ts               170   return prisma.analysis.findFirst({                            
+D:\kaiken-ai\lib\analysis-service.ts               192   const rows = await prisma.analysis.findMany({                 
+D:\kaiken-ai\lib\analysis-service.ts               219   const result = await prisma.analysis.deleteMany({ where: { ...
+D:\kaiken-ai\lib\cover-letter-service.ts            32   return prisma.analysis.findFirst({                            
+D:\kaiken-ai\lib\cover-letter-service.ts           149     coverLetter = await prisma.coverLetter.create({             
+D:\kaiken-ai\lib\cover-letter-service.ts           181   return prisma.coverLetter.findFirst({                         
+D:\kaiken-ai\lib\cover-letter-service.ts           223   const rows = await prisma.coverLetter.findMany({              
+D:\kaiken-ai\lib\cover-letter-service.ts           255   const result = await prisma.coverLetter.updateMany({          
+D:\kaiken-ai\lib\cover-letter-service.ts           267   const result = await prisma.coverLetter.deleteMany({ where:...
+D:\kaiken-ai\lib\db.ts                               1 import { PrismaPg } from "@prisma/adapter-pg";                  
+D:\kaiken-ai\lib\db.ts                               2 import { PrismaClient } from "@/generated/prisma/client";       
+D:\kaiken-ai\lib\db.ts                               7   prisma: PrismaClient | undefined;                             
+D:\kaiken-ai\lib\db.ts                              10 function createPrismaClient() {                                 
+D:\kaiken-ai\lib\db.ts                              11   // Prisma ORM v7 requires a driver adapter. PrismaPg works ...
+D:\kaiken-ai\lib\db.ts                              13   const adapter = new PrismaPg({ connectionString: serverEnv....
+D:\kaiken-ai\lib\db.ts                              14   return new PrismaClient({ adapter });                         
+D:\kaiken-ai\lib\db.ts                              17 export const prisma = globalForPrisma.prisma ?? createPrismaC...
+D:\kaiken-ai\lib\db.ts                              21 // fresh PrismaClient (and a fresh PrismaPg/pg pool, max 10 c...
+D:\kaiken-ai\lib\db.ts                              26 globalForPrisma.prisma = prisma;                                
+D:\kaiken-ai\lib\interview-service.ts               58   const rows = await prisma.interviewSession.findMany({         
+D:\kaiken-ai\lib\interview-service.ts               70   const row = await prisma.interviewSession.findFirst({ where...
+D:\kaiken-ai\lib\interview-service.ts               80   const row = await prisma.interviewSession.create({            
+D:\kaiken-ai\lib\interview-service.ts              101   const existing = await prisma.interviewSession.findFirst({ ...
+D:\kaiken-ai\lib\interview-service.ts              104   const row = await prisma.interviewSession.update({            
+D:\kaiken-ai\lib\interview-service.ts              121   const result = await prisma.interviewSession.deleteMany({ w...
+D:\kaiken-ai\lib\interview-service.ts              152   const rows = await prisma.interviewQuestion.findMany({        
+D:\kaiken-ai\lib\interview-service.ts              176   const session = await prisma.interviewSession.findFirst({     
+D:\kaiken-ai\lib\interview-service.ts              181   const existing = await prisma.interviewQuestion.findMany({    
+D:\kaiken-ai\lib\interview-service.ts              188     prisma.resume.findFirst({                                   
+D:\kaiken-ai\lib\interview-service.ts              193     prisma.analysis.findFirst({                                 
+D:\kaiken-ai\lib\interview-service.ts              235   await prisma.interviewQuestion.createMany({                   
+D:\kaiken-ai\lib\interview-service.ts              246   const created = await prisma.interviewQuestion.findMany({     
+D:\kaiken-ai\lib\interview-service.ts              307   const rows = await prisma.interviewAnswer.findMany({          
+D:\kaiken-ai\lib\interview-service.ts              324   const question = await prisma.interviewQuestion.findFirst({   
+D:\kaiken-ai\lib\interview-service.ts              330   const row = await prisma.interviewAnswer.upsert({             
+D:\kaiken-ai\lib\interview-service.ts              369   const answer = await prisma.interviewAnswer.findFirst({       
+D:\kaiken-ai\lib\interview-service.ts              399     prisma.interviewSession.findFirst({ where: { id: sessionI...
+D:\kaiken-ai\lib\interview-service.ts              400     prisma.interviewQuestion.findFirst({                        
+D:\kaiken-ai\lib\interview-service.ts              403     prisma.interviewAnswer.findFirst({                          
+D:\kaiken-ai\lib\interview-service.ts              420   const resume = await prisma.resume.findFirst({                
+D:\kaiken-ai\lib\interview-service.ts              444   const updated = await prisma.interviewAnswer.update({         
+D:\kaiken-ai\lib\interview-service.ts              500   const session = await prisma.interviewSession.findFirst({ w...
+D:\kaiken-ai\lib\interview-service.ts              504     prisma.interviewQuestion.findMany({                         
+D:\kaiken-ai\lib\interview-service.ts              508     prisma.interviewAnswer.findMany({ where: { sessionId } }),  
+D:\kaiken-ai\lib\interview-service.ts              687     await prisma.interviewSession.update({                      
+D:\kaiken-ai\lib\job-description-service.ts         26   const rows = await prisma.jobDescription.findMany({           
+D:\kaiken-ai\lib\job-description-service.ts         38   const row = await prisma.jobDescription.create({              
+D:\kaiken-ai\lib\job-description-service.ts         58   const existing = await prisma.jobDescription.findFirst({ wh...
+D:\kaiken-ai\lib\job-description-service.ts         61   const row = await prisma.jobDescription.update({              
+D:\kaiken-ai\lib\job-description-service.ts         77   const result = await prisma.jobDescription.deleteMany({ whe...
+D:\kaiken-ai\lib\optimize-service.ts                17   return prisma.analysis.findFirst({                            
+D:\kaiken-ai\lib\optimize-service.ts               117   const generated = await prisma.generatedResume.create({       
+D:\kaiken-ai\lib\optimize-service.ts               138   return prisma.generatedResume.findFirst({                     
+D:\kaiken-ai\lib\resume-service.ts                  24   return prisma.user.upsert({                                   
+D:\kaiken-ai\lib\resume-service.ts                  51   const existing = await prisma.parsedResume.findUnique({       
+D:\kaiken-ai\lib\resume-service.ts                  57     await prisma.$transaction([                                 
+D:\kaiken-ai\lib\resume-service.ts                  58       prisma.skill.deleteMany({ where: { parsedResumeId: exis...
+D:\kaiken-ai\lib\resume-service.ts                  59       prisma.experience.deleteMany({ where: { parsedResumeId:...
+D:\kaiken-ai\lib\resume-service.ts                  60       prisma.project.deleteMany({ where: { parsedResumeId: ex...
+D:\kaiken-ai\lib\resume-service.ts                  61       prisma.education.deleteMany({ where: { parsedResumeId: ...
+D:\kaiken-ai\lib\resume-service.ts                  62       prisma.certification.deleteMany({                         
+D:\kaiken-ai\lib\resume-service.ts                  65       prisma.parsedResume.delete({ where: { id: existing.id }...
+D:\kaiken-ai\lib\resume-service.ts                  69   await prisma.parsedResume.create({                            
+D:\kaiken-ai\lib\resume-service.ts                 148     ? await prisma.resume.findFirst({                           
+D:\kaiken-ai\lib\resume-service.ts                 158     (await prisma.resume.create({                               
+D:\kaiken-ai\lib\resume-service.ts                 196       prisma.$transaction([                                     
+D:\kaiken-ai\lib\resume-service.ts                 197         prisma.resume.update({                                  
+D:\kaiken-ai\lib\resume-service.ts                 212         prisma.resume.updateMany({                              
+D:\kaiken-ai\lib\resume-service.ts                 227     await prisma.resume                                         
+D:\kaiken-ai\lib\resume-service.ts                 242   return prisma.resume.findFirst({                              
+
+
